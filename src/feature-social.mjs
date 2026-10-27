@@ -1,4 +1,5 @@
-import { get,all,run,audit } from './db.mjs';
+import { createHash } from 'node:crypto';
+import { db,get,all,run,audit } from './db.mjs';
 import { escape as E,clean,validId,heading,panel,datatable,formEnd,input,select,queueMail,multipart,storeUpload,isAdmin,activeEdition,editionForUser } from './feature-service.mjs';
 
 function noticePage(req,api,notice=''){
@@ -135,8 +136,13 @@ function groupsPage(req,api,notice='',selectedEditionId=null){
   if(!selected)out+=panel('Sin convocatorias','<p>Crea una convocatoria antes de crear grupos.</p>');
  for(const g of groups){
    const members=all('SELECT u.id,u.first_name,u.last_name,u.role FROM group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=? AND u.edition_id=?',g.id,g.edition_id);
+    const groupEditions=editions.map(edition=>'<option value="'+edition.id+'"'+(edition.id===g.edition_id?' selected':'')+'>'+E(edition.label)+'</option>').join('');
    out+=panel(g.name+' · '+g.destination+' · '+g.edition_label,
   '<p>Participantes: '+members.map(m=>E(m.first_name+' '+m.last_name)+' ('+E(m.role)+')').join(', ')+'</p>'+
+   '<form class="form" method="post" action="/coordinacion/grupos/cambiar-convocatoria">'+
+   '<input type="hidden" name="group_id" value="'+g.id+'">'+
+   '<label>Corregir convocatoria<select name="edition_id">'+groupEditions+'</select></label>'+
+   formEnd(api.csrf(req),'Revisar cambio')+
   '<form class="form" method="post" action="/coordinacion/grupos/asignar">'+
   '<input type="hidden" name="group_id" value="'+g.id+'">'+
   '<label>Usuario'+select('user_id',users.map(u=>String(u.id)+'|'+u.first_name+' '+u.last_name+' ('+u.role+')'))+'</label>'+
@@ -144,6 +150,91 @@ function groupsPage(req,api,notice='',selectedEditionId=null){
   '<p><a href="/chat?grupo='+g.id+'">Abrir chat del grupo</a></p>');
  }
  api.layout(req,'Gestión de grupos',out);
+}
+function groupEditionSnapshot(groupId,targetEditionId){
+ const group=get('SELECT edition_id FROM mobility_groups WHERE id=?',groupId);
+ if(!group)return null;
+ return {
+  currentEditionId:group.edition_id,targetEditionId,
+  members:all('SELECT gm.user_id,u.edition_id,u.status FROM group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=? ORDER BY gm.user_id',groupId)
+   .map(row=>[row.user_id,row.edition_id,row.status]),
+  events:all('SELECT id FROM mobility_events WHERE group_id=? ORDER BY id',groupId).map(row=>row.id),
+  tasks:all('SELECT t.id,(SELECT COUNT(*) FROM mobility_task_completions c WHERE c.task_id=t.id) AS completions FROM mobility_tasks t WHERE t.group_id=? ORDER BY t.id',groupId)
+   .map(row=>[row.id,row.completions]),
+  messages:all('SELECT id FROM messages WHERE group_id=? ORDER BY id',groupId).map(row=>row.id),
+  files:all('SELECT id FROM files WHERE group_id=? ORDER BY id',groupId).map(row=>row.id)
+ };
+}
+function snapshotToken(snapshot){
+ return createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
+}
+function groupEditionImpact(groupId,targetEditionId){
+ const snapshot=groupEditionSnapshot(groupId,targetEditionId);
+ const matchedMembers=snapshot.members.filter(member=>member[1]===targetEditionId).length;
+ return {
+  snapshot,token:snapshotToken(snapshot),memberCount:snapshot.members.length,
+  matchedMembers,mismatchedMembers:snapshot.members.length-matchedMembers,
+  eventCount:snapshot.events.length,taskCount:snapshot.tasks.length,
+  completionCount:snapshot.tasks.reduce((count,task)=>count+task[1],0),
+  messageCount:snapshot.messages.length,fileCount:snapshot.files.length
+ };
+}
+function reviewGroupEdition(req,body,api){
+ const groupId=validId(body.group_id),targetId=validId(body.edition_id);
+ const group=groupId&&get('SELECT g.*,e.label AS edition_label FROM mobility_groups g JOIN erasmus_editions e ON e.id=g.edition_id WHERE g.id=?',groupId);
+ const target=targetId&&get('SELECT id,label FROM erasmus_editions WHERE id=?',targetId);
+ if(!group||!target){groupsPage(req,api,'Selecciona un grupo y una convocatoria válidos.',group?.edition_id);return;}
+ if(group.edition_id===target.id){groupsPage(req,api,'El grupo ya pertenece a esa convocatoria.',group.edition_id);return;}
+ const impact=groupEditionImpact(group.id,target.id);
+ const csrf=E(api.csrf(req));
+ const bodyHtml='<p>Vas a cambiar <b>'+E(group.name)+'</b> de <b>'+E(group.edition_label)+'</b> a <b>'+E(target.label)+'</b>.</p>'+
+  '<p><b>Participantes:</b> '+impact.memberCount+' asignados; '+impact.matchedMembers+' ya pertenecen a la convocatoria destino y '+impact.mismatchedMembers+' no coinciden con ella. Las asignaciones se conservarán; las cuentas que no coincidan no podrán ver la agenda del grupo.</p>'+
+  '<p><b>Agenda y tareas:</b> se conservarán '+impact.eventCount+' actividades, '+impact.taskCount+' tareas y '+impact.completionCount+' registros de tareas completadas. Seguirán asociadas al grupo y solo serán visibles para miembros aprobados de la convocatoria destino.</p>'+
+  '<p><b>Historial:</b> se conservarán '+impact.messageCount+' mensajes de grupo y '+impact.fileCount+' documentos. La corrección quedará registrada sin borrar el historial anterior.</p>'+
+  '<p class="muted">El cambio no mueve cuentas entre convocatorias ni envía la agenda a cuentas que no pertenezcan al grupo.</p>'+
+  '<form class="form" method="post" action="/coordinacion/grupos/cambiar-convocatoria/confirmar">'+
+  '<input type="hidden" name="group_id" value="'+group.id+'">'+
+  '<input type="hidden" name="current_edition_id" value="'+group.edition_id+'">'+
+  '<input type="hidden" name="edition_id" value="'+target.id+'">'+
+  '<input type="hidden" name="snapshot" value="'+impact.token+'">'+
+  '<input type="hidden" name="csrf" value="'+csrf+'">'+
+  '<button class="btn" type="submit">Confirmar cambio de convocatoria</button> '+
+  '<a class="btn secondary" href="/coordinacion/grupos?edicion='+group.edition_id+'">Cancelar</a></form>';
+ api.layout(req,'Revisar convocatoria del grupo',heading('COORDINACIÓN · MOVILIDADES','Revisar cambio de convocatoria',
+  'Comprueba cómo afectará el cambio antes de guardarlo.')+panel('Efectos del cambio',bodyHtml));
+}
+function confirmGroupEdition(req,body,api){
+ const groupId=validId(body.group_id),currentId=validId(body.current_edition_id),targetId=validId(body.edition_id);
+ const snapshot=String(body.snapshot||'');
+ const group=groupId&&get('SELECT id,edition_id FROM mobility_groups WHERE id=?',groupId);
+ const target=targetId&&get('SELECT id FROM erasmus_editions WHERE id=?',targetId);
+ if(!group||!target||!currentId||group.edition_id!==currentId||currentId===targetId){
+  groupsPage(req,api,'El grupo o la convocatoria cambiaron desde la revisión. Vuelve a revisar el cambio.',group?.edition_id);return;
+ }
+ let stale=false;
+ db.exec('BEGIN IMMEDIATE');
+ try{
+  const currentGroup=get('SELECT id,edition_id FROM mobility_groups WHERE id=?',groupId);
+  const currentImpact=currentGroup&&groupEditionImpact(groupId,targetId);
+  if(!currentGroup||currentGroup.edition_id!==currentId||!currentImpact||currentImpact.token!==snapshot){
+   stale=true;
+   throw new Error('stale group edition review');
+  }
+  const updated=run('UPDATE mobility_groups SET edition_id=? WHERE id=? AND edition_id=?',targetId,groupId,currentId);
+  if(updated.changes!==1)throw new Error('group edition update conflict');
+  run('INSERT INTO mobility_group_edition_history(group_id,previous_edition_id,new_edition_id,changed_by) VALUES (?,?,?,?)',
+   groupId,currentId,targetId,req.auth.user.id);
+  audit(req.auth.user.id,'mobility_group_edition_changed',groupId);
+  db.exec('COMMIT');
+ }catch(error){
+  db.exec('ROLLBACK');
+  if(stale){
+   groupsPage(req,api,'La composición del grupo o su agenda cambiaron desde la revisión. Revisa de nuevo los efectos antes de confirmar.',currentId);
+   return;
+  }
+  throw error;
+ }
+ groupsPage(req,api,'Convocatoria del grupo corregida. Sus participantes, agenda, tareas e historial se han conservado.',targetId);
 }
 function groupsPost(req,body,api){
  const name=clean(body.name,130),dest=clean(body.destination),type=clean(body.type),editionId=validId(body.edition_id);
@@ -174,7 +265,8 @@ function supervisor(req,api){
 }
 
 export async function socialRoutes(req,url,method,api){
- const routes=['/notificaciones','/chat','/coordinacion/avisos','/coordinacion/grupos','/coordinacion/grupos/asignar','/coordinacion/chat'];
+ const routes=['/notificaciones','/chat','/coordinacion/avisos','/coordinacion/grupos','/coordinacion/grupos/asignar',
+  '/coordinacion/grupos/cambiar-convocatoria','/coordinacion/grupos/cambiar-convocatoria/confirmar','/coordinacion/chat'];
  if(!routes.includes(url))return false;
  if(!api.mustLogin(req))return true;
  if(url==='/notificaciones'&&method==='GET'){noticePage(req,api);return true;}
@@ -192,6 +284,15 @@ export async function socialRoutes(req,url,method,api){
   else {const b=await api.readForm(req);if(api.requireCSRF(req,b))groupsPost(req,b,api);}
   return true;
  }
+  if(url==='/coordinacion/grupos/cambiar-convocatoria'||url==='/coordinacion/grupos/cambiar-convocatoria/confirmar'){
+   if(!api.mustAdmin(req))return true;
+   if(method!=='POST'){api.error(req,405,'Método no permitido.');return true;}
+   const b=await api.readForm(req);
+   if(api.requireCSRF(req,b)){
+    if(url.endsWith('/confirmar'))confirmGroupEdition(req,b,api);else reviewGroupEdition(req,b,api);
+   }
+   return true;
+  }
  if(url==='/coordinacion/grupos/asignar'&&method==='POST'){
   if(!api.mustAdmin(req))return true;
   const b=await api.readForm(req);if(api.requireCSRF(req,b))assignMember(req,b,api);

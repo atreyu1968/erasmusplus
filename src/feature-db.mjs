@@ -54,6 +54,11 @@ db.exec(
   "CREATE TABLE IF NOT EXISTS group_members ("+
   "group_id INTEGER NOT NULL REFERENCES mobility_groups(id) ON DELETE CASCADE,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,"+
   "PRIMARY KEY(group_id,user_id));" +
+  "CREATE TABLE IF NOT EXISTS mobility_group_edition_history ("+
+  "id INTEGER PRIMARY KEY,group_id INTEGER NOT NULL REFERENCES mobility_groups(id),"+
+  "previous_edition_id INTEGER NOT NULL REFERENCES erasmus_editions(id),"+
+  "new_edition_id INTEGER NOT NULL REFERENCES erasmus_editions(id),"+
+  "changed_by INTEGER NOT NULL REFERENCES users(id),changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);"+
   "CREATE TABLE IF NOT EXISTS outbox ("+
   "id INTEGER PRIMARY KEY,to_email TEXT NOT NULL,subject TEXT NOT NULL,body TEXT NOT NULL,"+
   "status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','failed')),"+

@@ -283,6 +283,91 @@ test('Valoración manual y agenda: seguridad por perfil, grupo y CSRF',async()=>
    assert.match(teacherNewEditionChatHtml,/Grupo: Grupo Róterdam 2027/);
    const [teacherOldEditionChat]=await page('/chat?grupo=1',assignedTeacher);
    assert.equal(teacherOldEditionChat.status,404);
+    const legacyMemberSeed=spawnSync(process.execPath,['--input-type=module','-e',[
+     "import {get,run} from './src/db.mjs';",
+     "const teacher=get(\"SELECT id FROM users WHERE username='DOCNOASIGNADO'\");",
+     "const admin=get(\"SELECT id FROM users WHERE username='ADMIN'\");",
+     "run('INSERT INTO group_members(group_id,user_id) VALUES (1,?)',teacher.id);",
+     "run(\"INSERT INTO messages(sender_id,group_id,content) VALUES (?,1,'Mensaje que debe conservarse')\",admin.id);",
+     "console.log(JSON.stringify({members:get('SELECT COUNT(*) AS n FROM group_members WHERE group_id=1').n,events:get('SELECT COUNT(*) AS n FROM mobility_events WHERE group_id=1').n,tasks:get('SELECT COUNT(*) AS n FROM mobility_tasks WHERE group_id=1').n,completions:get('SELECT COUNT(*) AS n FROM mobility_task_completions c JOIN mobility_tasks t ON t.id=c.task_id WHERE t.group_id=1').n,messages:get('SELECT COUNT(*) AS n FROM messages WHERE group_id=1').n}));"
+    ].join('\n')],{env,encoding:'utf8',timeout:20000});
+    assert.equal(legacyMemberSeed.status,0,legacyMemberSeed.stderr);
+    const preservedGroupHistory=JSON.parse(legacyMemberSeed.stdout.trim());
+    const [beforeCorrection,adminGroupsHtml]=await page('/coordinacion/grupos?edicion='+editions.currentEdition,admin);
+    assert.equal(beforeCorrection.status,200);
+    const groupCorrectionCsrf=adminGroupsHtml.match(/name="csrf" value="([a-f0-9]+)"/)?.[1];assert.ok(groupCorrectionCsrf);
+    const [legacyMemberAgenda]=await page('/agenda/grupo/1',unassignedTeacher);
+    assert.equal(legacyMemberAgenda.status,200);
+    const correctionReview=await post('/coordinacion/grupos/cambiar-convocatoria',admin,groupCorrectionCsrf,{
+     group_id:'1',edition_id:String(editions.nextEdition)
+    });
+    assert.equal(correctionReview.status,200);
+    const correctionReviewHtml=await correctionReview.text();
+    assert.match(correctionReviewHtml,/Revisar cambio de convocatoria/);
+    assert.match(correctionReviewHtml,/2 ya pertenecen a la convocatoria destino y 1 no coinciden/);
+    assert.match(correctionReviewHtml,/2 actividades/);
+    assert.match(correctionReviewHtml,/2 tareas/);
+    const reviewSnapshot=correctionReviewHtml.match(/name="snapshot" value="([a-f0-9]+)"/)?.[1];assert.ok(reviewSnapshot);
+    const previewReadOnly=spawnSync(process.execPath,['--input-type=module','-e',[
+     "import {get} from './src/db.mjs';",
+     "console.log(JSON.stringify({edition:get('SELECT edition_id FROM mobility_groups WHERE id=1').edition_id,history:get('SELECT COUNT(*) AS n FROM mobility_group_edition_history WHERE group_id=1').n}));"
+    ].join('\n')],{env,encoding:'utf8',timeout:20000});
+    assert.equal(previewReadOnly.status,0,previewReadOnly.stderr);
+    assert.deepEqual(JSON.parse(previewReadOnly.stdout.trim()),{edition:editions.currentEdition,history:0});
+    const correction=await post('/coordinacion/grupos/cambiar-convocatoria/confirmar',admin,groupCorrectionCsrf,{
+     group_id:'1',current_edition_id:String(editions.currentEdition),edition_id:String(editions.nextEdition),snapshot:reviewSnapshot
+    });
+    assert.equal(correction.status,200);
+    assert.match(await correction.text(),/Convocatoria del grupo corregida/);
+    const correctedHistory=spawnSync(process.execPath,['--input-type=module','-e',[
+     "import {get} from './src/db.mjs';",
+     "console.log(JSON.stringify({edition:get('SELECT edition_id FROM mobility_groups WHERE id=1').edition_id,history:get('SELECT COUNT(*) AS n FROM mobility_group_edition_history WHERE group_id=1').n,members:get('SELECT COUNT(*) AS n FROM group_members WHERE group_id=1').n,events:get('SELECT COUNT(*) AS n FROM mobility_events WHERE group_id=1').n,tasks:get('SELECT COUNT(*) AS n FROM mobility_tasks WHERE group_id=1').n,completions:get('SELECT COUNT(*) AS n FROM mobility_task_completions c JOIN mobility_tasks t ON t.id=c.task_id WHERE t.group_id=1').n,messages:get('SELECT COUNT(*) AS n FROM messages WHERE group_id=1').n,transition:get('SELECT previous_edition_id,new_edition_id FROM mobility_group_edition_history WHERE group_id=1')}));"
+    ].join('\n')],{env,encoding:'utf8',timeout:20000});
+    assert.equal(correctedHistory.status,0,correctedHistory.stderr);
+    const corrected=JSON.parse(correctedHistory.stdout.trim());
+    assert.equal(corrected.edition,editions.nextEdition);
+    assert.deepEqual(corrected.transition,{previous_edition_id:editions.currentEdition,new_edition_id:editions.nextEdition});
+    assert.equal(corrected.history,1);
+    assert.deepEqual({members:corrected.members,events:corrected.events,tasks:corrected.tasks,completions:corrected.completions,messages:corrected.messages},preservedGroupHistory);
+    const [formerEditionMemberAgenda]=await page('/agenda/grupo/1',unassignedTeacher);
+    assert.equal(formerEditionMemberAgenda.status,404);
+    const [sameEditionNonMemberAgenda]=await page('/agenda/grupo/1',other);
+    assert.equal(sameEditionNonMemberAgenda.status,404);
+    const addNewEditionMember=await post('/coordinacion/grupos/asignar',admin,groupCorrectionCsrf,{
+     group_id:'1',user_id:String(editions.otherId)
+    });
+    assert.equal(addNewEditionMember.status,200);
+    assert.match(await addNewEditionMember.text(),/Participante incorporado/);
+    const [newEditionAgenda,newEditionAgendaHtml]=await page('/agenda/grupo/1',other);
+    assert.equal(newEditionAgenda.status,200);
+    assert.match(newEditionAgendaHtml,/Reunión informativa/);
+    assert.match(newEditionAgendaHtml,/Revisar documentación/);
+    const [newEditionChat,newEditionChatHtml]=await page('/chat?grupo=1',other);
+    assert.equal(newEditionChat.status,200);
+    assert.match(newEditionChatHtml,/Mensaje que debe conservarse/);
+    const staleReview=await post('/coordinacion/grupos/cambiar-convocatoria',admin,groupCorrectionCsrf,{
+     group_id:'1',edition_id:String(editions.currentEdition)
+    });
+    assert.equal(staleReview.status,200);
+    const staleReviewHtml=await staleReview.text();
+    const staleSnapshot=staleReviewHtml.match(/name="snapshot" value="([a-f0-9]+)"/)?.[1];assert.ok(staleSnapshot);
+    const scheduleChanged=spawnSync(process.execPath,['--input-type=module','-e',[
+     "import {get,run} from './src/db.mjs';",
+     "const admin=get(\"SELECT id FROM users WHERE username='ADMIN'\");",
+     "run(\"INSERT INTO mobility_events(group_id,kind,title,start_time,created_by) VALUES (1,'activity','Actividad añadida después de revisar','2027-04-01T10:00',?)\",admin.id);"
+    ].join('\n')],{env,encoding:'utf8',timeout:20000});
+    assert.equal(scheduleChanged.status,0,scheduleChanged.stderr);
+    const staleConfirmation=await post('/coordinacion/grupos/cambiar-convocatoria/confirmar',admin,groupCorrectionCsrf,{
+     group_id:'1',current_edition_id:String(editions.nextEdition),edition_id:String(editions.currentEdition),snapshot:staleSnapshot
+    });
+    assert.equal(staleConfirmation.status,200);
+    assert.match(await staleConfirmation.text(),/cambiaron desde la revisión/);
+    const staleChangeBlocked=spawnSync(process.execPath,['--input-type=module','-e',[
+     "import {get} from './src/db.mjs';",
+     "console.log(JSON.stringify({edition:get('SELECT edition_id FROM mobility_groups WHERE id=1').edition_id,history:get('SELECT COUNT(*) AS n FROM mobility_group_edition_history WHERE group_id=1').n}));"
+    ].join('\n')],{env,encoding:'utf8',timeout:20000});
+    assert.equal(staleChangeBlocked.status,0,staleChangeBlocked.stderr);
+    assert.deepEqual(JSON.parse(staleChangeBlocked.stdout.trim()),{edition:editions.nextEdition,history:1});
  }finally{
   if(child?.pid){child.kill('SIGTERM');await new Promise(r=>setTimeout(r,70));}
   rmSync(data,{force:true,recursive:true});
