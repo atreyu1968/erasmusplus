@@ -7,6 +7,7 @@ import {
 } from './auth.mjs';
 import { settings, configureResend, sendMail, publicUrl } from './mailer.mjs';
 import crypto from 'node:crypto';
+import {extraRoute,startMailWorker} from './features.mjs';
 
 const host=process.env.HOST || '127.0.0.1', port=Number(process.env.PORT || 3000);
 const isRegistrationOpen=() => process.env.MMG_ENABLE_REGISTRATION==='1'
@@ -31,12 +32,12 @@ function field(label,name,{type='text',required=false,placeholder='',value='',ex
 function postButton(label,action,token,extras='') {
   return '<form method="post" action="'+action+'"><input type="hidden" name="csrf" value="'+X(token)+'">'+extras+'<button class="btn small" type="submit">'+X(label)+'</button></form>';
 }
-const nav=[['/panel','⌂','Inicio'],['/destinos','⌖','Destinos Erasmus'],['/movilidades','✈','Tipos de movilidad'],['/normativa','§','Normativa Erasmus']];
+const nav=[['/panel','⌂','Inicio'],['/candidatura','▤','Candidatura Erasmus'],['/destinos','⌖','Destinos Erasmus'],['/movilidades','✈','Tipos de movilidad'],['/normativa','§','Normativa Erasmus'],['/compromisos','✓','Compromisos'],['/notificaciones','♧','Notificaciones'],['/documentos','▣','Documentación'],['/chat','✉','Chat interno'],['/perfil','♙','Mi perfil']];
 function layout(req,title,main,{publicPage=false,status=200}={}){
   const user=req.auth?.user;
   const current=req.url.split('?')[0];
   const links=publicPage?[['/','⌂','Inicio'],['/acceso','⇥','Acceso'],['/registro','♙','Registro']]:
-    [...nav,...(user?.role==='coordinator'?[['/coordinacion','♙','Control de cuentas'],['/coordinacion/configuracion','⚙','Configurar Resend']]:[])];
+    [...nav,...(user?.role==='coordinator'?[['/coordinacion','▦','Control de cuentas'],['/coordinacion/candidaturas','▤','Candidaturas recibidas'],['/coordinacion/documentos','▣','Archivo documental'],['/coordinacion/grupos','♙','Grupos de movilidad'],['/coordinacion/configuracion','⚙','Configurar Resend']]:[])];
   const sidebar=links.map(([href,icon,name])=>'<a class="nav'+(href===current?' current':'')+'" href="'+href+'"><i>'+icon+'</i>'+X(name)+'</a>').join('');
   const sessionActions=user?postButton('Cerrar sesión','/salir',csrf(req)):'<a class="btn small" href="/acceso">Acceder</a>';
   const page='<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#143e71"><title>'+X(title)+' · Erasmus+ MMG</title><link rel="stylesheet" href="/styles.css"><link rel="manifest" href="/manifest.webmanifest"></head><body>'+
@@ -295,6 +296,13 @@ async function handler(req,res){
     header(req,200,url.endsWith('css')?'text/css; charset=utf-8':'application/manifest+json; charset=utf-8');
     res.end(data);return;
   }
+
+  const featureApi={
+    layout,error,redirect,csrf,mustLogin,mustAdmin,readForm,requireCSRF,send,
+    raw:(r,status,data,type,headers={})=>{header(r,status,type,headers);r.res.end(data);}
+  };
+  if(await extraRoute(req,url,req.method,featureApi))return;
+
   if(req.method==='GET'&&url==='/healthz'){header(req,200,'text/plain');res.end('ok');return;}
   if(req.method==='GET'&&url==='/'){if(req.auth){redirect(req,req.auth.user.role==='coordinator'?'/coordinacion':'/panel');return;}landing(req);return;}
   if(req.method==='GET'&&url==='/acceso'){login(req);return;}
@@ -339,3 +347,4 @@ async function handler(req,res){
 }
 const server=http.createServer(handler);
 server.listen(port,host,()=>console.log('Movilidades Erasmus+ MMG en http://'+host+':'+port));
+startMailWorker();
