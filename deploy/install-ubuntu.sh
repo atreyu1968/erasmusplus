@@ -145,6 +145,8 @@ printf '%s\n' \
  'Siguiente paso: sudo /usr/local/sbin/erasmusplus-init-admin' \
  'Comprobar servicio: systemctl status erasmusplus --no-pager' \
  'Comprobar origen del túnel: curl -fsS http://127.0.0.1:3000/healthz' \
- 'En Cloudflare Tunnel existente: hostname HTTPS autorizado → http://127.0.0.1:3000' \
+ 'Cloudflare Tunnel está en OTRO contenedor: configurar HOST=IP_PRIVADA_UBUNTU en /etc/erasmusplus/erasmusplus.env.' \
+ 'En el contenedor Cloudflare: crear origen http://IP_PRIVADA_UBUNTU:3000 (NO 127.0.0.1).' \
+ 'Restringir TCP 3000 únicamente a la IP privada del contenedor Cloudflare.' \
  'No abrir los puertos 3000 ni 443 del servidor para esta aplicación.' \
  'Las actualizaciones diarias están instaladas pero no se aplican hasta aprobar MMG_AUTO_UPDATE=1.'
