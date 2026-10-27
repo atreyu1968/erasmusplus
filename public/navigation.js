@@ -1,38 +1,73 @@
 (() => {
   const shell = document.querySelector(".shell");
-  const toggle = document.querySelector(".sidebar-toggle");
-  if (!shell || !toggle) return;
+  const sidebar = document.querySelector(".sidebar");
+  const pin = document.querySelector(".sidebar-pin");
+  if (!shell || !sidebar || !pin) return;
 
-  const storageKey = "mmg-sidebar-expanded";
-  let expanded = false;
+  const storageKey = "mmg-sidebar-pinned";
+  let pinned = false;
+  let hovered = false;
+  let focusWithin = false;
   try {
-    expanded = localStorage.getItem(storageKey) === "true";
+    const savedPin = localStorage.getItem(storageKey);
+    pinned = savedPin === null
+      ? localStorage.getItem("mmg-sidebar-expanded") === "true"
+      : savedPin === "true";
   } catch {}
 
-  const setExpanded = (value) => {
-    expanded = value;
-    shell.classList.toggle("sidebar-expanded", expanded);
-    toggle.setAttribute("aria-expanded", String(expanded));
-    const label = expanded ? "Contraer menú" : "Expandir menú";
-    toggle.setAttribute("aria-label", label);
-    toggle.title = label;
+  const update = () => {
+    const open = pinned || hovered || focusWithin;
+    shell.classList.toggle("sidebar-expanded", open);
+    pin.setAttribute("aria-expanded", String(open));
+    pin.setAttribute("aria-pressed", String(pinned));
+    const label = pinned ? "Desfijar menú" : "Fijar menú abierto";
+    pin.setAttribute("aria-label", label);
+    pin.title = label;
   };
 
-  setExpanded(expanded);
-  toggle.addEventListener("click", () => {
-    setExpanded(!expanded);
+  update();
+
+  if (typeof matchMedia === "function" && matchMedia("(hover: hover) and (pointer: fine)").matches) {
+    sidebar.addEventListener("pointerenter", () => {
+      hovered = true;
+      update();
+    });
+    sidebar.addEventListener("pointerleave", () => {
+      hovered = false;
+      update();
+    });
+  }
+
+  sidebar.addEventListener("focusin", () => {
+    focusWithin = true;
+    update();
+  });
+  sidebar.addEventListener("focusout", () => {
+    setTimeout(() => {
+      focusWithin = sidebar.contains(document.activeElement);
+      update();
+    }, 0);
+  });
+
+  pin.addEventListener("click", () => {
+    pinned = !pinned;
+    if (!pinned) focusWithin = false;
     try {
-      localStorage.setItem(storageKey, String(expanded));
+      localStorage.setItem(storageKey, String(pinned));
     } catch {}
+    update();
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && expanded) {
-      setExpanded(false);
+    if (event.key === "Escape" && (pinned || hovered || focusWithin)) {
+      pinned = false;
+      hovered = false;
+      focusWithin = false;
       try {
         localStorage.setItem(storageKey, "false");
       } catch {}
-      toggle.focus();
+      document.querySelector(".brand")?.focus();
+      update();
     }
   });
 })();

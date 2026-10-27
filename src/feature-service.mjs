@@ -20,6 +20,9 @@ export const mobilityModes=['short','long','shadowing'];
 export function activeEdition() {
   return get('SELECT * FROM erasmus_editions WHERE is_active=1 LIMIT 1')||null;
 }
+export function editionForUser(user) {
+  return user?.edition_id?get('SELECT * FROM erasmus_editions WHERE id=?',user.edition_id)||null:activeEdition();
+}
 export function destinationsForEdition(editionId=activeEdition()?.id,{includeInactive=false}={}) {
   const id=Number(editionId);
   if(!Number.isSafeInteger(id)||id<1)return [];

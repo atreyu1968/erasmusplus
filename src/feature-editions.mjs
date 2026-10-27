@@ -79,7 +79,8 @@ function destinationForm(edition,destination,csrf) {
 function render(req,api,message='',selectedId=null) {
   const editions=all(
     'SELECT e.*,(SELECT COUNT(*) FROM erasmus_destinations d WHERE d.edition_id=e.id AND d.is_active=1) AS destination_count,'+
-    '(SELECT COUNT(*) FROM applications a WHERE a.edition_id=e.id) AS application_count '+
+    '(SELECT COUNT(*) FROM applications a WHERE a.edition_id=e.id) AS application_count,'+
+    "(SELECT COUNT(*) FROM users u WHERE u.edition_id=e.id AND u.role IN ('student','teacher')) AS user_count "+
     'FROM erasmus_editions e ORDER BY e.label DESC'
   );
   const current=activeEdition();
@@ -95,10 +96,10 @@ function render(req,api,message='',selectedId=null) {
     '<label>Curso académico<input name="label" placeholder="2027–2028" required maxlength="11"></label>'+
     '<input type="hidden" name="csrf" value="'+csrf+'"><button class="btn">Crear edición</button></form>'+
     '<section class="card"><h2>Edición vigente</h2><p>'+(current?'<b>'+E(current.label)+'</b>':'Sin edición activa')+
-    '</p><p class="muted">Solo los destinos activos de esta edición aparecen en la portada y en las candidaturas nuevas.</p></section></div>';
+    '</p><p class="muted">Solo sus destinos activos aparecen en la portada y en las candidaturas. Las cuentas conservan su convocatoria asignada al cambiar la vigente; coordinación debe reasignarlas expresamente.</p></section></div>';
 
   html+='<section class="card"><h2>Ediciones guardadas</h2><div class="responsive"><table><thead><tr>'+
-    '<th>Edición</th><th>Destinos</th><th>Candidaturas</th><th>Estado y acciones</th></tr></thead><tbody>'+
+    '<th>Edición</th><th>Destinos</th><th>Cuentas</th><th>Candidaturas</th><th>Estado y acciones</th></tr></thead><tbody>'+
     (editions.length?editions.map(edition=>{
       const canActivate=edition.is_active||edition.destination_count>0;
       return '<tr><td><form class="inline-form" method="post" action="/coordinacion/ediciones">'+
@@ -106,7 +107,7 @@ function render(req,api,message='',selectedId=null) {
         '<input type="hidden" name="csrf" value="'+csrf+'"><label class="sr-only" for="edition-label-'+edition.id+'">Nombre de edición</label>'+
         '<input id="edition-label-'+edition.id+'" name="label" value="'+E(edition.label)+'" maxlength="11" required>'+
         '<button class="btn small secondary" type="submit">Guardar</button></form></td>'+
-        '<td>'+edition.destination_count+'</td><td>'+edition.application_count+'</td><td>'+
+        '<td>'+edition.destination_count+'</td><td>'+edition.user_count+'</td><td>'+edition.application_count+'</td><td>'+
         (edition.is_active?'<span class="pill">Vigente</span>':
           '<form class="inline-form" method="post" action="/coordinacion/ediciones">'+
           '<input type="hidden" name="action" value="activate-edition"><input type="hidden" name="edition_id" value="'+edition.id+'">'+
@@ -114,7 +115,7 @@ function render(req,api,message='',selectedId=null) {
         ' <a href="/coordinacion/ediciones?edicion='+edition.id+'#destinos">Gestionar destinos</a>'+
         (!edition.destination_count&&!edition.is_active?'<small>Añade al menos un destino para activar.</small>':'')+
         '</td></tr>';
-    }).join(''):'<tr><td colspan="4">No hay ediciones guardadas.</td></tr>')+
+    }).join(''):'<tr><td colspan="5">No hay ediciones guardadas.</td></tr>')+
     '</tbody></table></div></section>';
 
   if(selected) {

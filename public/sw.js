@@ -1,6 +1,6 @@
 // No cache of HTML, personalised responses, API calls, or personal documents.
-const CACHE='mmg-static-v2';
-const STATIC=['/styles.css','/icon.svg'];
+const CACHE='mmg-static-v3';
+const STATIC=['/styles.css','/erasmus-logo.png','/erasmus-favicon-192.png','/erasmus-favicon-512.png'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(STATIC)));
  self.skipWaiting();

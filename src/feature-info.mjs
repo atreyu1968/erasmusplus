@@ -1,4 +1,4 @@
-import {escape as E,heading,panel,activeEdition} from './feature-service.mjs';
+import {escape as E,heading,panel,editionForUser} from './feature-service.mjs';
 
 const culture={
  viseu:{
@@ -28,7 +28,7 @@ const culture={
 };
 function infoPage(req,api,key){
  const info=culture[key];
-  let html=heading('DESTINO ERASMUS+ '+(activeEdition()?.label||''),info.title,info.sub);
+  let html=heading('DESTINO ERASMUS+ '+(editionForUser(req.auth?.user)?.label||''),info.title,info.sub);
  html+='<div class="info-hero info-'+E(key)+'"><div><p class="eyebrow">ENRIQUECIENDO VIDAS · ABRIENDO MENTES</p><h2>'+E(info.title)+'</h2><p>'+E(info.intro)+'</p></div></div>';
  html+=panel('Cultura y aprendizaje','<ul>'+info.facts.map(f=>'<li>'+E(f)+'</li>').join('')+'</ul>'+
  '<p class="muted">'+E(info.warning)+'</p>');

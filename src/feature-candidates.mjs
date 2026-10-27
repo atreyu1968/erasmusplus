@@ -53,7 +53,16 @@ function candidatePage(req,api,notice='',old={}){
  const user=req.auth.user;
  if(isAdmin(user)){api.redirect(req,'/coordinacion/candidaturas');return;}
  const edition=activeEdition(),destinations=edition?destinationsForEdition(edition.id):[];
- api.layout(req,'Candidatura Erasmus',formBody(api.csrf(req),user,edition,destinations,old,notice)+listApps(user,api.csrf(req)));
+  const memberEdition=user.edition_id&&get('SELECT label FROM erasmus_editions WHERE id=?',user.edition_id);
+  const isAssigned=Boolean(edition&&user.edition_id===edition.id);
+  const form=isAssigned
+    ?formBody(api.csrf(req),user,edition,destinations,old,notice)
+    :panel('Convocatoria asignada',
+      '<p>Tu cuenta pertenece a '+E(memberEdition?.label||'una convocatoria sin asignar')+
+      (edition?' y la convocatoria vigente es '+E(edition.label):'')+
+      '. Contacta con coordinación para confirmar o cambiar la asignación antes de presentar una candidatura.</p>'+
+      (notice?'<p>'+E(notice)+'</p>':''));
+  api.layout(req,'Candidatura Erasmus',form+listApps(user,api.csrf(req)));
 }
 function pdfRows(application,u,editionLabel){
  return [
@@ -70,6 +79,10 @@ function submitCandidate(req,body,api){
  const mobility=normalizeMobility(body.mobility),family=clean(body.family),destination=clean(body.destination);
  const motivation=clean(body.motivation,5000),mec=u.role==='student'?clean(body.mec):'No procede';
  const intent=String(body.intent||'');
+ if(!edition||u.edition_id!==edition.id) {
+   candidatePage(req,api,'Tu cuenta no está asignada a la convocatoria vigente. Contacta con coordinación para revisar la asignación.');
+   return;
+ }
  if(!edition||editionId!==edition.id||!mobility||!allowed(u,mobility,family,destination,edition.id)||motivation.length<30||
    (u.role==='student'&&!['Sí','No'].includes(mec))||!['submit','draft'].includes(intent)) {
      candidatePage(req,api,'La edición pudo cambiar. Comprueba modalidad, familia, destino y motivación (mínimo 30 caracteres) y vuelve a intentarlo.',body);return;

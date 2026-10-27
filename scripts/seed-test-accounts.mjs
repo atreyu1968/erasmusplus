@@ -36,6 +36,12 @@ if(!relative||relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolu
 
 const {db,get,run}=await import('../src/db.mjs');
 const {hashPassword}=await import('../src/auth.mjs');
+await import('../src/feature-db.mjs');
+const edition=get('SELECT id FROM erasmus_editions WHERE is_active=1');
+if(!edition){
+  console.error('No hay una convocatoria activa para asignar las cuentas ficticias.');
+  process.exit(1);
+}
 const password='MMG-Aislado-Prueba-2026!';
 const fixtures=[
   {role:'teacher',username:'TESTDOCENTE',first:'Docente',last:'Prueba',email:'test-docente@example.invalid'},
@@ -55,12 +61,12 @@ db.exec('BEGIN IMMEDIATE');
 try{
   for(const fixture of fixtures){
     run(
-      "INSERT INTO users(role,username,pass_hash,first_name,last_name,institutional_email,email_verified_at,status,professional_family) "+
-      "VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP,'approved','Administración y gestión') "+
+      "INSERT INTO users(role,username,pass_hash,first_name,last_name,institutional_email,email_verified_at,status,professional_family,edition_id) "+
+      "VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP,'approved','Administración y gestión',?) "+
       "ON CONFLICT(username) DO UPDATE SET pass_hash=excluded.pass_hash,first_name=excluded.first_name,"+
       "last_name=excluded.last_name,institutional_email=excluded.institutional_email,"+
-      "email_verified_at=CURRENT_TIMESTAMP,status='approved',professional_family=excluded.professional_family",
-      fixture.role,fixture.username,passwordHash,fixture.first,fixture.last,fixture.email
+      "email_verified_at=CURRENT_TIMESTAMP,status='approved',professional_family=excluded.professional_family,edition_id=excluded.edition_id",
+      fixture.role,fixture.username,passwordHash,fixture.first,fixture.last,fixture.email,edition.id
     );
   }
   db.exec('COMMIT');

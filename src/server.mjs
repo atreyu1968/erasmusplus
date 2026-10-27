@@ -9,7 +9,7 @@ import { settings, configureResend, sendMail, publicUrl } from './mailer.mjs';
 import crypto from 'node:crypto';
 import {extraRoute,startMailWorker} from './features.mjs';
 import {privacyReady,ageOnRegistration,acknowledgeAdult,clearance,emailGuardianLink} from './feature-privacy.mjs';
-import {activeEdition,destinationsForEdition} from './feature-service.mjs';
+import {activeEdition,editionForUser,destinationsForEdition} from './feature-service.mjs';
 
 const host=process.env.HOST || '127.0.0.1', port=Number(process.env.PORT || 3000);
 const isRegistrationOpen=() => process.env.MMG_ENABLE_REGISTRATION==='1' && privacyReady();
@@ -55,20 +55,25 @@ function iconMarkup(icon){
   const path=navIconPaths[icon];
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+(path||navIconPaths['▤'])+'"/></svg>';
 }
-function layout(req,title,main,{publicPage=false,status=200,mainClass=''}={}){
+function layout(req,title,main,{publicPage=false,status=200,mainClass='',hideSidebar=false}={}){
   const user=req.auth?.user;
   const current=req.url.split('?')[0];
-  const links=publicPage?[['/','⌂','Inicio'],['/acceso','⇥','Acceso'],['/registro','♙','Registro'],['/privacidad','§','Privacidad']]:
+  const links=hideSidebar?[]:publicPage?[['/','⌂','Inicio'],['/acceso','⇥','Acceso'],['/registro','♙','Registro'],['/privacidad','§','Privacidad']]:
     [...nav,...(user?.role==='coordinator'?[['/coordinacion','▦','Control de cuentas'],['/coordinacion/ediciones','▦','Ediciones y destinos'],['/coordinacion/candidaturas','▤','Candidaturas recibidas'],['/coordinacion/documentos','▣','Archivo documental'],['/coordinacion/grupos','♙','Grupos de movilidad'],['/coordinacion/chat','✉','Supervisión de chat'],['/coordinacion/privacidad','✓','Autorizaciones de menores'],['/coordinacion/crear-cuenta','＋','Crear cuenta'],['/coordinacion/configuracion','⚙','Configurar Resend']]:[])];
   const sidebar=links.map(([href,icon,name],index)=>
     (user?.role==='coordinator'&&index===nav.length?'<span class="nav-divider">COORDINACIÓN</span>':'')+
     '<a class="nav'+(href===current?' current':'')+'" href="'+href+'" title="'+X(name)+'" aria-label="'+X(name)+'"><i aria-hidden="true">'+iconMarkup(icon)+'</i><span class="nav-label">'+X(name)+'</span></a>'
   ).join('');
   const sessionActions=user?postButton('Cerrar sesión','/salir',csrf(req)):'<a class="btn small" href="/acceso">Acceder</a>';
-  const edition=activeEdition();
-  const page='<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#143e71"><title>'+X(title)+' · Erasmus+ MMG</title><link rel="stylesheet" href="/styles.css"><link rel="manifest" href="/manifest.webmanifest"></head><body>'+
-  '<div class="shell"><header class="topbar"><button class="sidebar-toggle" type="button" aria-label="Expandir menú" aria-controls="app-sidebar" aria-expanded="false" title="Expandir menú"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><a class="brand" href="/"><span class="mark">MMG+</span><span class="brand-copy"><b>Movilidades Erasmus+</b><small>IES Manuel Martín González</small></span></a><span class="course-label">'+X(edition?.label||'Sin edición activa')+'</span><div class="user"><span class="avatar">'+X((user?.first_name||'E').slice(0,1))+'</span><span class="user-name">'+X(user?.first_name||'Visitante')+'</span>'+sessionActions+'</div></header>'+
-  '<aside class="sidebar" id="app-sidebar" aria-label="Navegación principal"><p class="side-label">GUÍA DE ISORA · TENERIFE</p><nav>'+sidebar+'</nav><div class="sidefooter">Enriqueciendo vidas.<br>Abriendo mentes.</div></aside>'+
+  const edition=editionForUser(user);
+  const userIdentity=hideSidebar?'':'<span class="avatar">'+X((user?.first_name||'E').slice(0,1))+'</span><span class="user-name">'+X(user?.first_name||'Visitante')+'</span>';
+  const sidebarMarkup=hideSidebar?'':'<aside class="sidebar" id="app-sidebar" aria-label="Navegación principal">'+
+    '<button class="sidebar-pin" type="button" aria-label="Fijar menú abierto" aria-controls="app-sidebar" aria-expanded="false" aria-pressed="false" title="Fijar menú abierto">'+
+    '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l-1 5 3 3v2H6v-2l3-3-1-5Zm4 10v8"/></svg>'+
+    '</button><p class="side-label">GUÍA DE ISORA · TENERIFE</p><nav>'+sidebar+'</nav><div class="sidefooter">Enriqueciendo vidas.<br>Abriendo mentes.</div></aside>';
+  const page='<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#143e71"><title>'+X(title)+' · Erasmus+ MMG</title><link rel="icon" type="image/png" sizes="192x192" href="/erasmus-favicon-192.png"><link rel="apple-touch-icon" href="/erasmus-favicon-192.png"><link rel="stylesheet" href="/styles.css"><link rel="manifest" href="/manifest.webmanifest"></head><body>'+
+  '<div class="shell'+(hideSidebar?' public-shell':'')+'"><header class="topbar"><a class="brand" href="/"><img class="brand-logo" src="/erasmus-logo.png" alt=""><span class="brand-copy"><b>Movilidades Erasmus+</b><small>IES Manuel Martín González</small></span></a><span class="course-label">'+X(edition?.label||'Sin edición activa')+'</span><div class="user">'+userIdentity+sessionActions+'</div></header>'+
+  sidebarMarkup+
   '<div class="workspace"><main'+(mainClass?' class="'+X(mainClass)+'"':'')+'>'+main+'<footer>Movilidades Erasmus+ MMG · Fase 1 de desarrollo. No introducir datos reales hasta concluir la revisión de seguridad y protección de datos.</footer></main></div></div><script src="/navigation.js" defer></script></body></html>';
   const cookieResult=csrfToken(req);
   send(req,status,page,cookieResult.setCookie?{'Set-Cookie':cookieResult.setCookie}:{});
@@ -85,7 +90,10 @@ const fallbackDestinationImages={
 };
 const publicImageAssets={
   '/images/mmg-viseu-commons.jpg':'image/jpeg',
-  '/images/mmg-porto-commons.jpg':'image/jpeg'
+  '/images/mmg-porto-commons.jpg':'image/jpeg',
+  '/erasmus-logo.png':'image/png',
+  '/erasmus-favicon-192.png':'image/png',
+  '/erasmus-favicon-512.png':'image/png'
 };
 function imageCredit(destination){
  if(!destination.image_credit||!destination.image_source_url||!destination.image_license_url||!destination.image_license_name)return '';
@@ -119,18 +127,20 @@ function landing(req){
     '<section class="visitor-route" aria-labelledby="visitor-route-title"><div class="visitor-route-marker" aria-hidden="true"><span class="visitor-marker-ring"><span></span></span><span class="visitor-marker-line"></span><span class="visitor-marker-dot"></span></div><div class="visitor-route-copy"><p class="visitor-kicker"><span></span>IES Manuel Martín González</p><h2 id="visitor-route-title">Desde Tenerife,<br>con rumbo a Europa.</h2><p>Movilidades Erasmus+ de formación profesional. Explora los destinos previstos y accede para conocer el espacio de candidatura.</p><a class="visitor-text-link" href="/acceso">Iniciar sesión'+visitorArrow()+'</a></div><div class="visitor-route-art" aria-hidden="true"><div class="visitor-route-orbit visitor-orbit-one"></div><div class="visitor-route-orbit visitor-orbit-two"></div><span class="visitor-route-island">TFE</span><span class="visitor-route-europe">EU</span><svg viewBox="0 0 360 220" fill="none"><path d="M55 154C101 95 140 76 185 106C232 138 255 115 304 55"/><circle cx="55" cy="154" r="5"/><circle cx="304" cy="55" r="5"/></svg></div></section>'+
     '<section class="visitor-closing" aria-label="Acceso a la plataforma"><div><p class="visitor-kicker"><span></span>Tu próximo paso</p><h2>¿Quieres conocer la plataforma?</h2></div><div class="visitor-closing-actions"><a class="visitor-button visitor-primary" href="/registro">Solicitar cuenta'+visitorArrow()+'</a><a href="/acceso">Ya tengo cuenta'+visitorArrow(true)+'</a></div></section>'+
     '<div class="visitor-footer"><a href="/" class="visitor-footer-brand">MMG<span>+</span><small>Movilidades Erasmus+</small></a><span>IES Manuel Martín González · Tenerife</span><a href="/privacidad">Privacidad'+visitorArrow(true)+'</a></div>';
-  layout(req,'Bienvenida',content,{publicPage:true,mainClass:'visitor-page'});
+  layout(req,'Bienvenida',content,{publicPage:true,mainClass:'visitor-page',hideSidebar:true});
 }
 function login(req,msg=''){
  layout(req,'Acceso','<div class="form-container"><p class="eyebrow">ÁREA PERSONAL</p><h1>Iniciar sesión</h1><p>Solo las cuentas con correo verificado y aprobadas por coordinación podrán acceder.</p>'+ (msg?formAlert(msg):'')+
- '<form class="card form" method="post" action="/acceso"><input type="hidden" name="csrf" value="'+csrf(req)+'">'+field('DNI (docentes) o CIAL (alumnado)','username',{required:true,extra:'autocomplete="username"'})+
- field('Contraseña','password',{type:'password',required:true,extra:'autocomplete="current-password"'})+'<button class="btn" type="submit">Acceder con contraseña</button><button class="btn secondary" type="button" id="loginPasskey">Entrar con passkey</button><p id="passkeyStatus" role="status"></p></form><p><a href="/registro">Solicitar una cuenta</a> · <a href="/reenviar">Reenviar verificación de correo</a></p></div>',{publicPage:true});
+  '<form class="card form" method="post" action="/acceso"><input type="hidden" name="csrf" value="'+csrf(req)+'">'+field('DNI (docentes) o CIAL (alumnado)','username',{required:true,extra:'autocomplete="username"'})+
+  field('Contraseña','password',{type:'password',required:true,extra:'autocomplete="current-password"'})+'<button class="btn" type="submit">Acceder con contraseña</button><button class="btn secondary" type="button" id="loginPasskey">Entrar con passkey</button><p id="passkeyStatus" role="status"></p></form><p><a href="/registro">Solicitar una cuenta</a> · <a href="/reenviar">Reenviar verificación de correo</a></p></div>',{publicPage:true,hideSidebar:true});
 }
 function registration(req,msg=''){
- const open=isRegistrationOpen() && settings().configured;
+  const edition=activeEdition();
+  const open=isRegistrationOpen() && settings().configured && Boolean(edition);
  const families=['Administración y gestión','Agraria','Edificación y obra civil','Imagen personal','Transporte y mantenimiento de vehículos'];
  const options=families.map(x=>'<option>'+X(x)+'</option>').join('');
- const form='<form class="card form" method="post" action="/registro"><input type="hidden" name="csrf" value="'+csrf(req)+'">'+
+  const form='<form class="card form" method="post" action="/registro"><input type="hidden" name="csrf" value="'+csrf(req)+'">'+
+  '<p class="notice-box">Esta cuenta quedará vinculada a la convocatoria '+X(edition?.label||'vigente')+'. Coordinación podrá cambiar la asignación.</p>'+
  '<h2>1. Datos personales</h2><div class="fields"><label>Perfil<select name="role" required><option value="student">Alumnado</option><option value="teacher">Docente</option></select></label>'+
  field('Nombre','first_name',{required:true,extra:'maxlength="100"'})+
  field('Apellidos','last_name',{required:true,extra:'maxlength="150"'})+
@@ -151,20 +161,20 @@ function registration(req,msg=''){
  '<label class="checkbox"><input type="checkbox" name="privacy" value="yes" required> He leído el <a href="/privacidad" target="_blank" rel="noopener noreferrer">aviso de privacidad</a> y acuso recibo de la información. Si soy mayor de edad, se registrará electrónicamente mi aceptación informativa; si soy menor, mi representante legal deberá firmar y subir un PDF de autorización.</label>'+
  '<button class="btn" type="submit" '+(open?'':'disabled')+'>Enviar solicitud</button></form>';
  layout(req,'Registro','<div class="heading"><p class="eyebrow">SOLICITUD DE CUENTA</p><h1>Registro de participantes</h1><p>Formulario de alumnado y docentes con aprobación manual obligatoria.</p></div>'+
- (!open?formAlert('Registro deshabilitado. Coordinación debe configurar Resend y aprobar el aviso de privacidad antes de abrir las altas.'):'')+
- (msg?formAlert(msg):'')+form,{publicPage:true});
+  (!open?formAlert(edition?'Registro deshabilitado. Coordinación debe configurar Resend y aprobar el aviso de privacidad antes de abrir las altas.':'No hay una convocatoria vigente para asociar nuevas cuentas.'):'')+
+  (msg?formAlert(msg):'')+form,{publicPage:true,hideSidebar:true});
 }
 function home(req){
  const user=req.auth.user;
  if(user.role==='coordinator'){redirect(req,'/coordinacion');return;}
-  const edition=activeEdition();
+  const edition=editionForUser(user);
  layout(req,'Mi espacio','<p class="eyebrow">TU ESPACIO ERASMUS+</p><h1>¡Bienvenido/a, '+X(user.first_name)+'!</h1><p>Tu cuenta ha sido verificada y aprobada por coordinación.</p>'+
  '<div class="hero short"><h2>Tu próxima experiencia europea empieza aquí.</h2><p>Consulta destinos, modalidades e información del programa.</p><a class="btn light" href="/destinos">Explorar destinos</a></div>'+
   '<div class="heading"><p class="eyebrow">CURSO '+X(edition?.label||'')+'</p><h2>Explora las movilidades</h2></div>'+destinationCards(edition?destinationsForEdition(edition.id):[])+
  '<div class="card"><h2>Próximas funcionalidades</h2><p>Candidaturas, archivos PDF, notificaciones y chat se desarrollarán después de validar esta primera fase.</p></div>');
 }
 function destinationsPage(req){
-  const edition=activeEdition(),destinations=edition?destinationsForEdition(edition.id):[];
+  const edition=editionForUser(req.auth.user),destinations=edition?destinationsForEdition(edition.id):[];
   const rows=destinations.map(destination=>'<tr><td>'+X(destination.name)+'</td><td>'+X(destination.country)+'</td>'+
     '<td>'+X(destination.modes.map(mode=>mode==='short'?'Movilidad corta':mode==='long'?'Movilidad larga':'Job Shadowing').join(' · '))+'</td>'+
     '<td>'+X(destination.families.join(' · ')||'Todas las familias')+'</td></tr>').join('');
@@ -192,15 +202,16 @@ function verificationConfirm(req,token){
  '<form class="card form" method="post" action="/verificar"><input type="hidden" name="csrf" value="'+csrf(req)+'"><input type="hidden" name="token" value="'+X(token)+'"><button class="btn">Confirmar mi correo</button></form></div>',{publicPage:true});
 }
 function adminDashboard(req,notice=''){
- const users=all("SELECT id,role,username,first_name,last_name,birth_date,institutional_email,status,email_verified_at,created_at FROM users WHERE role!='coordinator' ORDER BY created_at DESC LIMIT 150");
+  const users=all("SELECT u.id,u.role,u.username,u.first_name,u.last_name,u.birth_date,u.institutional_email,u.status,u.email_verified_at,u.created_at,e.label AS edition_label "+
+    "FROM users u LEFT JOIN erasmus_editions e ON e.id=u.edition_id WHERE u.role!='coordinator' ORDER BY u.created_at DESC LIMIT 150");
  const total=users.length,pending=users.filter(u=>u.status==='pending').length,teachers=users.filter(u=>u.role==='teacher').length,students=users.filter(u=>u.role==='student').length;
  const rows=users.map(u=>'<tr><td><b>'+X(u.first_name+' '+u.last_name)+'</b><small>'+X(u.role==='teacher'?'Docente':'Alumnado')+'</small></td>'+
- '<td>'+X(u.institutional_email)+'</td><td>'+X(u.email_verified_at?'Verificado':'Pendiente')+'</td><td>'+X(clearance(u).label)+'</td><td><span class="pill">'+X(u.status)+'</span></td><td><a href="/coordinacion/usuario/'+u.id+'">Ficha</a> · <a href="/coordinacion/editar/'+u.id+'">Editar</a></td><td>'+
+  '<td>'+X(u.institutional_email)+'</td><td>'+X(u.edition_label||'Sin asignar')+'</td><td>'+X(u.email_verified_at?'Verificado':'Pendiente')+'</td><td>'+X(clearance(u).label)+'</td><td><span class="pill">'+X(u.status)+'</span></td><td><a href="/coordinacion/usuario/'+u.id+'">Ficha</a> · <a href="/coordinacion/editar/'+u.id+'">Editar</a></td><td>'+
  (u.status==='pending'?postButton('Aprobar','/coordinacion/estado',csrf(req),'<input type="hidden" name="id" value="'+u.id+'"><input type="hidden" name="status" value="approved">'):'')+
  (u.status!=='disabled'?postButton('Desactivar','/coordinacion/estado',csrf(req),'<input type="hidden" name="id" value="'+u.id+'"><input type="hidden" name="status" value="disabled">'):'')+'</td></tr>').join('');
  layout(req,'Control de cuentas','<div class="heading"><p class="eyebrow">ADMINISTRACIÓN ERASMUS+ MMG</p><h1>Panel de coordinación</h1><p>Registro y aprobación de cuentas. Solo podrán aprobarse usuarios con correo institucional verificado.</p></div>'+
  (notice?formAlert(notice):'')+'<div class="metrics"><div><span>REGISTRADOS</span><b>'+total+'</b></div><div><span>PENDIENTES</span><b>'+pending+'</b></div><div><span>DOCENTES</span><b>'+teachers+'</b></div><div><span>ALUMNADO</span><b>'+students+'</b></div></div>'+
- '<div class="card"><div class="row"><h2>Control de cuentas</h2><a class="btn small" href="/coordinacion/crear-cuenta">+ Añadir cuenta</a><a class="btn small" href="/coordinacion/privacidad">✓ Revisar autorizaciones de menores</a><a class="btn small" href="/coordinacion/configuracion">⚙ Configurar Resend</a></div><div class="responsive"><table><thead><tr><th>Participante</th><th>Correo</th><th>Verificación</th><th>Estado</th><th>Ficha</th><th>Acciones</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+  '<div class="card"><div class="row"><h2>Control de cuentas</h2><a class="btn small" href="/coordinacion/ediciones">Convocatorias y destinos</a><a class="btn small" href="/coordinacion/crear-cuenta">+ Añadir cuenta</a><a class="btn small" href="/coordinacion/privacidad">✓ Revisar autorizaciones de menores</a><a class="btn small" href="/coordinacion/configuracion">⚙ Configurar Resend</a></div><div class="responsive"><table><thead><tr><th>Participante</th><th>Correo</th><th>Convocatoria</th><th>Verificación</th><th>Privacidad</th><th>Estado</th><th>Ficha</th><th>Acciones</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
  (users.length?'':'<p>Sin solicitudes de participantes.</p>')+'</div>');
 }
 function adminUser(req,id){
@@ -208,6 +219,7 @@ function adminUser(req,id){
  if(!u){error(req,404,'Usuario no encontrado.');return;}
  const rows=[
  ['Nombre',u.first_name+' '+u.last_name],['Perfil',u.role],['Usuario',u.username],
+  ['Convocatoria',get('SELECT label FROM erasmus_editions WHERE id=?',u.edition_id)?.label||'Sin asignar'],
  ['Nacimiento',u.birth_date],['DNI',u.dni],['CIAL',u.cial],['Teléfono',u.phone],
  ['Teléfono familiar',u.guardian_phone],['Correo institucional',u.institutional_email],
  ['Correo alternativo',u.gmail],['Familia profesional',u.professional_family],
@@ -259,6 +271,8 @@ async function sendVerification(user){
 async function register(req,body){
  if(!requireCSRF(req,body))return;
  if(!isRegistrationOpen()||!settings().configured){registration(req,'El registro aún no está habilitado.');return;}
+  const edition=activeEdition();
+  if(!edition){registration(req,'No existe una convocatoria vigente a la que asociar la cuenta.');return;}
  const role=String(body.role||'');
  if(!['student','teacher'].includes(role)){registration(req,'Selecciona un perfil válido.');return;}
  const username=lookupUsername(body,role),email=String(body.institutional_email||'').trim().toLowerCase();
@@ -277,14 +291,14 @@ async function register(req,body){
  const dup=get('SELECT id FROM users WHERE username=? OR institutional_email=?',username,email);
  if(dup){registration(req,'Ya existe una solicitud con estos datos. Contacta con coordinación.');return;}
  const hash=await hashPassword(password);
- const info=run("INSERT INTO users(role,username,pass_hash,first_name,last_name,birth_date,dni,cial,phone,guardian_phone,institutional_email,gmail,professional_family,center,studies,modules,privacy_version,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')",
+  const info=run("INSERT INTO users(role,username,pass_hash,first_name,last_name,birth_date,dni,cial,phone,guardian_phone,institutional_email,gmail,professional_family,center,studies,modules,edition_id,privacy_version,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')",
    role,username,hash,first,last,dob,String(body.dni||'').trim(),String(body.cial||'').trim(),String(body.phone||'').trim(),
    String(body.guardian_phone||'').trim(),email,String(body.gmail||'').trim(),
-   String(body.professional_family||'').trim(),String(body.center||'').trim(),String(body.studies||'').trim(),String(body.modules||'').trim(),process.env.MMG_PRIVACY_VERSION);
+    String(body.professional_family||'').trim(),String(body.center||'').trim(),String(body.studies||'').trim(),String(body.modules||'').trim(),edition.id,process.env.MMG_PRIVACY_VERSION);
  const id=Number(info.lastInsertRowid);
  if(age>=18)acknowledgeAdult(id);
  audit(null,'registration_requested',id);
- let note='Solicitud guardada. Revisa tu correo institucional para confirmar el enlace. Después, coordinación aprobará la cuenta.';
+  let note='Solicitud guardada para la convocatoria '+edition.label+'. Revisa tu correo institucional para confirmar el enlace. Después, coordinación aprobará la cuenta.';
  try {await sendVerification({id,first_name:first,institutional_email:email});}
  catch(e){console.error('Resend: error de entrega tras registro:',e.message);note='Solicitud guardada, pero no se pudo enviar la verificación. Solicita un reenvío cuando el servicio esté disponible.';}
  layout(req,'Solicitud recibida','<div class="form-container">'+success('Solicitud recibida',note)+'<p><a class="btn" href="/acceso">Volver al acceso</a></p></div>',{publicPage:true});

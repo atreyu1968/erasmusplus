@@ -1,5 +1,5 @@
 import {all,get} from './db.mjs';
-import {escape as E,heading,panel,activeEdition} from './feature-service.mjs';
+import {escape as E,heading,panel,activeEdition,editionForUser} from './feature-service.mjs';
 
 const resultName={
  in_review:'En valoración',shortlisted:'Preseleccionada',
@@ -27,10 +27,14 @@ export function participantDashboard(req,api){
  "JOIN group_members gm ON gm.group_id=g.id WHERE gm.user_id=? AND e.start_time>=? "+
  "ORDER BY e.start_time LIMIT 5",u.id,new Date().toISOString().slice(0,16));
  const role=u.role==='student'?'alumnado':'profesorado';
-  let out=heading('CURSO '+(activeEdition()?.label||'')+' · ERASMUS+ MMG','¡Hola, '+u.first_name+'!',
+  const memberEdition=editionForUser(u),currentEdition=activeEdition();
+  let out=heading('CONVOCATORIA '+(memberEdition?.label||'SIN ASIGNAR')+' · ERASMUS+ MMG','¡Hola, '+u.first_name+'!',
    'Tu espacio personal de '+role+' para las movilidades Erasmus+ del IES Manuel Martín González.');
+  if(!memberEdition)out+=panel('Sin convocatoria asignada','<p>Contacta con coordinación para vincular tu cuenta a una convocatoria concreta.</p>');
+  else if(currentEdition&&currentEdition.id!==memberEdition.id)
+   out+=panel('Convocatoria asignada','<p>Tu cuenta pertenece a '+E(memberEdition.label)+'. La convocatoria vigente es '+E(currentEdition.label)+'. Coordinación puede confirmar o cambiar tu asignación.</p>');
  out+='<div class="stat-grid">'+
-  card('Candidaturas',app.length,'En esta convocatoria')+
+   card('Candidaturas',app.length,'Historial de convocatorias')+
   card('Grupos asignados',groups.length,'Movilidades confirmadas por coordinación')+
   card('Tareas pendientes',tasks,'Consultar en Agenda')+
   card('Avisos publicados',notices,'Notificaciones para tu perfil')+

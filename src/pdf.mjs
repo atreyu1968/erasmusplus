@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 // Multi-page PDF in WinAnsi built with core Node.js, without a signing certificate.
+const logoJpeg=readFileSync(new URL('./erasmus-logo-pdf.jpg',import.meta.url));
+const logoWidth=420,logoHeight=238;
 const sanitize = value => String(value ?? '')
   .normalize('NFKC').replace(/[^\x20-\x7e\u00a1-\u00ff\n]/g,'?').replace(/\r/g,'');
 const pdfEscape = s => sanitize(s).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
@@ -22,8 +25,9 @@ function wrap(text, length=88) {
 }
 function streamFor(lines,pageNum,total) {
   const list=[
-   'BT','/F1 16 Tf','50 798 Td','('+pdfEscape('MOVILIDADES ERASMUS+ MMG')+') Tj','ET',
-   'BT','/F1 9 Tf','50 776 Td','('+pdfEscape('IES Manuel Martín González - Guía de Isora')+') Tj','ET'
+   'q','108 0 0 61 50 766 cm','/Logo Do','Q',
+   'BT','/F1 16 Tf','170 801 Td','('+pdfEscape('MOVILIDADES ERASMUS+ MMG')+') Tj','ET',
+   'BT','/F1 9 Tf','170 779 Td','('+pdfEscape('IES Manuel Martín González - Guía de Isora')+') Tj','ET'
   ];
   let y=749;
   for(const line of lines) {
@@ -52,12 +56,17 @@ export function makePdf({title,rows=[],note=''}) {
   let i=0;
   for(const chunk of chunks) {
     const pageId=3+i*2,contentId=pageId+1;
-    objects[pageId]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 '+(3+pages*2)+' 0 R >> >> /Contents '+contentId+' 0 R >>';
+    objects[pageId]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 '+(3+pages*2)+' 0 R >> /XObject << /Logo '+(4+pages*2)+' 0 R >> >> /Contents '+contentId+' 0 R >>';
     const stream=streamFor(chunk,i+1,pages);
     objects[contentId]=Buffer.concat([Buffer.from('<< /Length '+stream.length+' >>\nstream\n'),stream,Buffer.from('endstream')]);
     i++;
   }
   objects[3+pages*2]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+  objects[4+pages*2]=Buffer.concat([
+    Buffer.from('<< /Type /XObject /Subtype /Image /Width '+logoWidth+' /Height '+logoHeight+
+      ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+logoJpeg.length+' >>\nstream\n'),
+    logoJpeg,Buffer.from('\nendstream')
+  ]);
   const buffers=[Buffer.from('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n','latin1')];
   const offsets=[0];
   let offset=buffers[0].length;

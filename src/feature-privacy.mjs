@@ -96,7 +96,7 @@ export function noticePage(req,api){
   panel('Información jurídica','<p>En el ámbito educativo, algunos tratamientos se amparan en obligaciones legales o en una misión de interés público y no requieren consentimiento. La aceptación electrónica registra que se ha leído y recibido la información, no sustituye la determinación de la base jurídica.</p>'+
   '<p>Cuando una operación concreta requiera consentimiento, deberá solicitarse por separado, de manera libre y específica.</p>'+
   '<p><a target="_blank" rel="noopener noreferrer" href="https://www.aepd.es/preguntas-frecuentes/10-menores-y-educacion/FAQ-1001-cual-es-la-edad-para-que-los-menores-puedan-prestar-consentimiento-para-tratar-sus-datos-personales">AEPD: edad para consentir el tratamiento de datos de menores ↗</a></p>');
- api.layout(req,'Aviso de privacidad',body,{publicPage:!req.auth});
+  api.layout(req,'Aviso de privacidad',body,{publicPage:!req.auth,hideSidebar:true});
 }
 export function guardianSession(req){
  const value=cookies(req).mmg_guardian;

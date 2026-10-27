@@ -13,6 +13,8 @@ test('El PDF contiene catálogo de páginas, texto y huella verificable',()=>{
  assert.ok(bytes.toString('latin1',0,8).startsWith('%PDF-1.4'));
  assert.match(bytes.toString('latin1'),/startxref/);
  assert.match(bytes.toString('latin1'),/Candidatura Erasmus/i);
+ assert.match(bytes.toString('latin1'),/\/Subtype \/Image/);
+ assert.match(bytes.toString('latin1'),/\/Logo Do/);
  assert.equal(digest(bytes).length,64);
 });
 test('Docente y alumnado: permisos, candidatura y PDF',async()=>{
@@ -59,11 +61,12 @@ test('Docente y alumnado: permisos, candidatura y PDF',async()=>{
   assert.equal(candidate.status,200);
   const candidateHtml=await candidate.text();
   const userCsrf=candidateHtml.match(/name="csrf" value="([a-f0-9]+)"/)?.[1];
-  assert.ok(userCsrf);
+   const editionId=candidateHtml.match(/name="edition_id" value="(\d+)"/)?.[1];
+   assert.ok(userCsrf&&editionId);
   const submitted=await fetch(base+'/candidatura',{method:'POST',redirect:'manual',
    headers:{'Content-Type':'application/x-www-form-urlencoded',Cookie:session},
    body:new URLSearchParams({
-     csrf:userCsrf,mobility:'long|Movilidad larga Dual-Erasmus+',family:'Administración y gestión',
+      csrf:userCsrf,edition_id:editionId,mobility:'long|Movilidad larga Dual-Erasmus+',family:'Administración y gestión',
      destination:'Oporto',motivation:'Quiero realizar prácticas internacionales para mejorar mi formación profesional y mi autonomía personal.',
      mec:'No',intent:'submit'
    })});

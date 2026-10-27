@@ -8,6 +8,7 @@ test('El modelo de autorización se descarga como PDF AcroForm editable y con da
   first_name:'Alumno',last_name:'Ficticio',birth_date:'2010-02-16',studies:'Grado Medio de prueba'
  });
  assert.ok(pdf.subarray(0,5).equals(Buffer.from('%PDF-')));
+ assert.match(pdf.toString('latin1'),/\/Subtype \/Image/);
  const doc=await PDFDocument.load(pdf);
  assert.equal(doc.getPages().length,2);
  const form=doc.getForm();

@@ -91,6 +91,8 @@ test('MVP: creación del coordinador y controles básicos',async ()=>{
    assert.ok(homepage.includes('href="'+route+'"'),`la portada enlaza con ${label}`);
    const publicPage=await fetch(base+route);
    assert.equal(publicPage.status,200,`el destino ${route} responde correctamente`);
+    const pageHtml=await publicPage.text();
+    assert.doesNotMatch(pageHtml,/class="sidebar"/,`la página ${route} no muestra barra lateral`);
   }
   r=await fetch(base+'/coordinacion',{redirect:'manual'});
   assert.equal(r.status,303);

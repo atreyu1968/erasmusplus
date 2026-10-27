@@ -81,6 +81,9 @@ for (const [name,definition] of [
 if (!db.prepare('PRAGMA table_info(applications)').all().some(column=>column.name==='edition_id')) {
   db.exec('ALTER TABLE applications ADD COLUMN edition_id INTEGER REFERENCES erasmus_editions(id)');
 }
+if (!db.prepare('PRAGMA table_info(users)').all().some(column=>column.name==='edition_id')) {
+  db.exec('ALTER TABLE users ADD COLUMN edition_id INTEGER REFERENCES erasmus_editions(id)');
+}
 
 if (!db.prepare('SELECT 1 FROM app_migrations WHERE name=?').get('seed-erasmus-editions-v1')) {
   let edition=db.prepare('SELECT id FROM erasmus_editions WHERE label=?').get('2026–2027');
@@ -132,6 +135,9 @@ if (!db.prepare('SELECT 1 FROM app_migrations WHERE name=?').get('seed-erasmus-e
 }
 
 const activeEdition=db.prepare('SELECT id FROM erasmus_editions WHERE is_active=1').get();
-if (activeEdition) db.prepare('UPDATE applications SET edition_id=? WHERE edition_id IS NULL').run(activeEdition.id);
+if (activeEdition) {
+  db.prepare('UPDATE applications SET edition_id=? WHERE edition_id IS NULL').run(activeEdition.id);
+  db.prepare("UPDATE users SET edition_id=? WHERE role IN ('student','teacher') AND edition_id IS NULL").run(activeEdition.id);
+}
 db.exec('DROP INDEX IF EXISTS app_unique;');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS app_unique_per_edition ON applications(user_id,mobility,edition_id);');

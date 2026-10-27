@@ -2,7 +2,15 @@ import crypto from 'node:crypto';
 import { get,run,audit,all } from './db.mjs';
 import { hashPassword } from './auth.mjs';
 import { sendMail,publicUrl,settings } from './mailer.mjs';
-import {escape as E,clean,heading,panel,input,formEnd,validId,schoolFamilies,select,queueMail } from './feature-service.mjs';
+import {escape as E,clean,heading,panel,input,formEnd,validId,schoolFamilies,select,queueMail,activeEdition } from './feature-service.mjs';
+
+function editionSelector(selectedId,required=true){
+ const editions=all('SELECT id,label FROM erasmus_editions ORDER BY label DESC');
+ return '<label>Convocatoria asignada<select name="edition_id"'+(required?' required':'')+'>'+
+   (required?'':'<option value="">Sin convocatoria</option>')+
+   editions.map(edition=>'<option value="'+edition.id+'"'+(Number(selectedId)===edition.id?' selected':'')+'>'+E(edition.label)+'</option>').join('')+
+   '</select></label>';
+}
 
 function userPage(req,api,notice=''){
  const u=req.auth.user;
@@ -12,7 +20,8 @@ function userPage(req,api,notice=''){
  if(notice)html+=panel('Resultado','<p>'+E(notice)+'</p>');
  html+=panel('Datos personales','<p><b>Nombre:</b> '+E(u.first_name+' '+u.last_name)+'</p>'+
  '<p><b>Edad:</b> '+E(age)+'</p><p><b>Correo institucional:</b> '+E(u.institutional_email)+'</p>'+
- '<p><b>Identificador de usuario:</b> '+E(u.username)+'</p>');
+  '<p><b>Identificador de usuario:</b> '+E(u.username)+'</p>'+
+  '<p><b>Convocatoria:</b> '+E(get('SELECT label FROM erasmus_editions WHERE id=?',u.edition_id)?.label||'Sin asignar')+'</p>');
  html+='<form class="card form" method="post" action="/perfil"><h2>Actualizar datos de contacto y académicos</h2>'+
  '<label>Teléfono'+input('phone',u.phone||'','tel',45)+'</label>'+
  (u.role==='student'?'<label>Teléfono familiar'+input('guardian_phone',u.guardian_phone||'','tel',45)+'</label>'+
@@ -52,6 +61,8 @@ function adminEdit(req,api,id,notice=''){
  '<label>Correo institucional'+input('institutional_email',u.institutional_email,'email')+'</label>'+
  '<label>Correo alternativo'+input('gmail',u.gmail||'','email')+'</label>'+
  '<label>Familia profesional'+select('professional_family',schoolFamilies,u.professional_family)+'</label>'+
+  editionSelector(u.edition_id)+
+  '<p class="muted">Cambiar la convocatoria de la cuenta no mueve candidaturas anteriores; esas permanecen asociadas a su edición original.</p>'+
  '<label>Centro'+input('center',u.center||'')+'</label>'+
  '<label>Estudios'+input('studies',u.studies||'')+'</label>'+
  '<label>Módulos y cursos'+input('modules',u.modules||'')+'</label>'+
@@ -67,22 +78,25 @@ function saveAdminEdit(req,api,id,b){
  const u=get("SELECT * FROM users WHERE id=? AND role!='coordinator'",id);
  if(!u){api.error(req,404,'Cuenta no encontrada.');return;}
  const first=clean(b.first_name,100),last=clean(b.last_name,150),email=clean(b.institutional_email,200).toLowerCase(),
-   dni=clean(b.dni,30).toUpperCase(),cial=clean(b.cial,30).toUpperCase(),date=clean(b.birth_date,10);
+    dni=clean(b.dni,30).toUpperCase(),cial=clean(b.cial,30).toUpperCase(),date=clean(b.birth_date,10),
+    editionId=validId(b.edition_id);
  const username=u.role==='teacher'?dni:cial;
- if(!first||!last||!username||!email.endsWith('@canariaseducacion.es')||
+  if(!first||!last||!username||!email.endsWith('@canariaseducacion.es')||
+    !editionId||!get('SELECT id FROM erasmus_editions WHERE id=?',editionId)||
    (date&&!/^\d{4}-\d{2}-\d{2}$/.test(date))){
   adminEdit(req,api,id,'Revisa el nombre, identificador, fecha y correo institucional.');return;
  }
  const dup=get('SELECT id FROM users WHERE (username=? OR institutional_email=?) AND id!=?',username,email,id);
  if(dup){adminEdit(req,api,id,'Ya existe otra cuenta con ese usuario o correo.');return;}
  const changed=email!==u.institutional_email;
- run("UPDATE users SET first_name=?,last_name=?,birth_date=?,dni=?,cial=?,username=?,phone=?,guardian_phone=?,institutional_email=?,gmail=?,professional_family=?,center=?,studies=?,modules=?,email_verified_at=CASE WHEN ? THEN NULL ELSE email_verified_at END,status=CASE WHEN ? THEN 'pending' ELSE status END WHERE id=?",
+  run("UPDATE users SET first_name=?,last_name=?,birth_date=?,dni=?,cial=?,username=?,phone=?,guardian_phone=?,institutional_email=?,gmail=?,professional_family=?,center=?,studies=?,modules=?,edition_id=?,email_verified_at=CASE WHEN ? THEN NULL ELSE email_verified_at END,status=CASE WHEN ? THEN 'pending' ELSE status END WHERE id=?",
  first,last,date,dni,cial,username,clean(b.phone,45),clean(b.guardian_phone,45),email,clean(b.gmail,200),
  schoolFamilies.includes(b.professional_family)?b.professional_family:u.professional_family,
  clean(b.center,200),clean(b.studies,200),clean(b.modules,400),
- changed?1:0,changed?1:0,id);
+  editionId,changed?1:0,changed?1:0,id);
  if(changed)run('DELETE FROM sessions WHERE user_id=?',id);
  audit(req.auth.user.id,'admin_user_profile_updated',id);
+  if(editionId!==u.edition_id)audit(req.auth.user.id,'admin_user_edition_assigned',id);
  adminEdit(req,api,id,changed?'Datos guardados. El correo modificado deberá verificarse de nuevo y la cuenta queda pendiente; utiliza el procedimiento de reenvío.':'Ficha actualizada.');
 }
 function anonymize(req,api,id,b){
@@ -146,6 +160,7 @@ function createAccountPage(req,api,notice=''){
  if(notice)html+=panel('Resultado',E(notice));
  html+='<form method="post" action="/coordinacion/crear-cuenta" class="card form">'+
  '<label>Perfil'+select('role',['teacher','student'])+'</label>'+
+  editionSelector(activeEdition()?.id)+
  '<label>Nombre'+input('first_name')+'</label>'+
  '<label>Apellidos'+input('last_name')+'</label>'+
  '<label>Fecha de nacimiento'+input('birth_date','','date',10)+'</label>'+
@@ -161,21 +176,23 @@ function createAccountPage(req,api,notice=''){
  api.layout(req,'Añadir cuenta',html);
 }
 function createAccount(req,api,b){
+  const editionId=validId(b.edition_id);
  const role=clean(b.role),first=clean(b.first_name,100),last=clean(b.last_name,150),
   email=clean(b.institutional_email,200).toLowerCase(),dni=clean(b.dni,30).toUpperCase(),cial=clean(b.cial,30).toUpperCase(),
   username=role==='teacher'?dni:cial,
   dob=clean(b.birth_date,10),age=ageOnRegistration(dob),guardian=clean(b.guardian_phone,45);
- if(!['teacher','student'].includes(role)||!first||!last||!username||!email.endsWith('@canariaseducacion.es')||
+  if(!['teacher','student'].includes(role)||!first||!last||!username||!email.endsWith('@canariaseducacion.es')||
+   !editionId||!get('SELECT id FROM erasmus_editions WHERE id=?',editionId)||
   age===null||age<12||age>100||(role==='teacher'&&age<18)||(age<18&&!guardian)||!privacyReady()||!settings().configured){
   createAccountPage(req,api,'La cuenta exige datos válidos, privacidad aprobada y Resend configurado.');return;
  }
  if(get('SELECT id FROM users WHERE username=? OR institutional_email=?',username,email)){
   createAccountPage(req,api,'Ya hay una cuenta con ese identificador o correo.');return;
  }
- const id=Number(run("INSERT INTO users(role,username,pass_hash,first_name,last_name,dni,cial,phone,guardian_phone,birth_date,institutional_email,center,professional_family,privacy_version,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')",
-  role,username,'disabled-'+crypto.randomBytes(30).toString('hex'),first,last,dni,cial,clean(b.phone,45),guardian,dob,email,
+  const id=Number(run("INSERT INTO users(role,username,pass_hash,first_name,last_name,dni,cial,phone,guardian_phone,birth_date,institutional_email,center,professional_family,edition_id,privacy_version,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')",
+   role,username,'disabled-'+crypto.randomBytes(30).toString('hex'),first,last,dni,cial,clean(b.phone,45),guardian,dob,email,
   clean(b.center,200),schoolFamilies.includes(b.professional_family)?b.professional_family:null,
-  process.env.MMG_PRIVACY_VERSION).lastInsertRowid);
+   editionId,process.env.MMG_PRIVACY_VERSION).lastInsertRowid);
  const token=crypto.randomBytes(32).toString('hex');
  run('INSERT INTO verification_tokens(token_hash,user_id,expires_at) VALUES (?,?,?)',
   crypto.createHash('sha256').update(token).digest('hex'),id,Date.now()+24*3600*1000);

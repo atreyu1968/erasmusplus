@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { readFileSync } from 'node:fs';
 
 // Original model, with genuine AcroForm fields. Built at request time on the
 // server, so each download may be prefilling the current (authenticated) pupil.
@@ -36,13 +37,12 @@ function lines(page,text,{x=44,y,width=507,size=10,lineHeight=15,font,color=C.te
   }
   return pos;
 }
-function standardHeader(page,font,bold,pageNum){
+function standardHeader(page,font,bold,pageNum,logo){
   page.drawRectangle({x:0,y:H-120,width:W,height:120,color:C.navy});
-  page.drawRectangle({x:42,y:H-92,width:63,height:60,color:C.cyan,borderRadius:12});
-  page.drawText('MMG+', {x:49,y:H-71,size:17,font:bold,color:C.white});
-  page.drawText('MOVILIDADES ERASMUS+ MMG',{x:123,y:H-57,size:18.7,font:bold,color:C.white});
+  page.drawImage(logo,{x:42,y:H-98,width:108,height:61});
+  page.drawText('MOVILIDADES ERASMUS+ MMG',{x:166,y:H-57,size:18.7,font:bold,color:C.white});
   page.drawText('IES Manuel Martín González  ·  Guía de Isora, Tenerife',
-    {x:123,y:H-82,size:10,font,color:C.white});
+    {x:166,y:H-82,size:10,font,color:C.white});
   page.drawRectangle({x:42,y:H-144,width:511,height:17,color:C.light});
   page.drawText('MODELO DE AUTORIZACIÓN  ·  CURSO 2026-2027  ·  SUJETO A VALIDACIÓN',
     {x:49,y:H-139,size:9.0,font:bold,color:C.navy});
@@ -65,6 +65,7 @@ function formField(form,page,{name,label,x,y,width,value='',required=false}){
 }
 export async function makeFillableGuardianPdf(user={}){
   const pdf=await PDFDocument.create();
+  const logo=await pdf.embedPng(readFileSync(new URL('../public/erasmus-logo.png',import.meta.url)));
   pdf.setTitle('Autorización del representante legal - Erasmus+ MMG - Formulario rellenable');
   pdf.setSubject('Formulario AcroForm para cumplimentar en móvil, tableta u ordenador');
   pdf.setAuthor('Movilidades Erasmus+ MMG - modelo de revisión');
@@ -74,8 +75,8 @@ export async function makeFillableGuardianPdf(user={}){
   const form=pdf.getForm();
   const p1=pdf.addPage([W,H]);p1._mmgFont=normal;p1._mmgBold=bold;
   const p2=pdf.addPage([W,H]);
-  standardHeader(p1,normal,bold,1);
-  standardHeader(p2,normal,bold,2);
+  standardHeader(p1,normal,bold,1,logo);
+  standardHeader(p2,normal,bold,2,logo);
   p1.drawText('AUTORIZACIÓN DEL PADRE, MADRE O TUTOR/A LEGAL',
     {x:44,y:658,font:bold,size:16,color:C.navy});
 
