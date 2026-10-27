@@ -5,5 +5,13 @@
   "display": "standalone",
   "theme_color": "#153d6b",
   "background_color": "#f6f9fc",
-  "icons": []
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "description": "Gestión de movilidades Erasmus+ IES Manuel Martín González"
 }
