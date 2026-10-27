@@ -21,7 +21,7 @@ SWITCHED=0
 STOPPED=0
 
 log() { printf '[ERASMUS-MMG] %s\n' "$*"; }
-die() { log "ERROR: $*"; exit 1; }
+die() { log "ERROR: $*"; if declare -F rollback >/dev/null 2>&1; then rollback 1; else exit 1; fi; }
 [[ "$EUID" == 0 ]] || die 'Se requiere sudo/root.'
 [[ "${1:-}" == "" || "${1:-}" == "--scheduled" ]] || die 'Uso: erasmusplus-update [--scheduled]'
 [[ -f "$SETTINGS" ]] && source "$SETTINGS"
@@ -40,7 +40,7 @@ exec 9>/run/lock/erasmusplus-update.lock
 flock -n 9 || die 'Otra actualización está en curso.'
 
 rollback() {
-  local code=$?
+  local code=${1:-$?}
   trap - ERR INT TERM
   log "Error $code: intentando recuperar código y datos anteriores."
   if [[ "$SWITCHED" == 1 ]]; then
@@ -94,7 +94,7 @@ log "Validando versión $NEW_SHA antes de detener el servicio."
   cd "$STAGE"
   npm ci --omit=dev --ignore-scripts --no-audit --no-fund
   find src scripts -name '*.mjs' -print0 | xargs -0 -n1 node --check
-  runuser -u nobody -- npm test
+  runuser -u nobody -- env HOME=/tmp npm test
 )
 printf '%s\n' "$NEW_SHA" > "$STAGE/.revision"
 chmod -R a+rX "$STAGE"
