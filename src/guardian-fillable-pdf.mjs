@@ -58,10 +58,9 @@ function formField(form,page,{name,label,x,y,width,value='',required=false}){
   const normal=page._mmgFont;
   page.drawText(label+(required?' *':''),{x,y:y+33,font:page._mmgBold,size:9.5,color:C.text});
   const field=form.createTextField(name);
-  field.setFontSize(11);
-  if(value)field.setText(value);
   field.addToPage(page,{x,y,width,height:25,borderWidth:1,borderColor:C.border,
-    backgroundColor:C.white,textColor:C.navy});
+    backgroundColor:C.white,textColor:C.navy,fontSize:11});
+  if(value)field.setText(value);
   return field;
 }
 export async function makeFillableGuardianPdf(user={}){
