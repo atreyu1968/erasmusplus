@@ -47,7 +47,7 @@ export function participantDashboard(req,api){
   '<p><a href="/candidatura">Abrir candidaturas →</a></p>')+
  panel('Mis grupos y movilidades',
   groups.length?groups.map(g=>'<div class="dashboard-item"><div><b>'+E(g.name)+'</b><p>'+E(g.destination)+'</p></div>'+
-  '<a href="/agenda/grupo/'+g.id+'">Agenda</a></div>').join(''):'<p>Los grupos aparecerán cuando coordinación confirme la asignación.</p>')+
+  '<a href="/agenda/grupo/'+g.id+'">Agenda</a></div>').join(''):'<p>Los grupos aparecerán cuando coordinación confirme la asignación.</p>'+
   '<p><a href="/agenda">Ver agenda y tareas →</a></p>')+'</div>';
  out+='<div class="two">'+panel('Próximas actividades',
   events.length?events.map(e=>'<div class="dashboard-item"><div><b>'+E(e.title)+'</b>'+
