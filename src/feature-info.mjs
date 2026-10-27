@@ -29,7 +29,7 @@ const culture={
 function infoPage(req,api,key){
  const info=culture[key];
  let html=heading('DESTINO ERASMUS+ 2026–2027',info.title,info.sub);
- html+='<div class="info-hero" style="background-image:linear-gradient(90deg,#123d6bed,#123d6b62),url('+info.image+')"><div><p class="eyebrow">ENRIQUECIENDO VIDAS · ABRIENDO MENTES</p><h2>'+E(info.title)+'</h2><p>'+E(info.intro)+'</p></div></div>';
+ html+='<div class="info-hero info-'+E(key)+'"><div><p class="eyebrow">ENRIQUECIENDO VIDAS · ABRIENDO MENTES</p><h2>'+E(info.title)+'</h2><p>'+E(info.intro)+'</p></div></div>';
  html+=panel('Cultura y aprendizaje','<ul>'+info.facts.map(f=>'<li>'+E(f)+'</li>').join('')+'</ul>'+
  '<p class="muted">'+E(info.warning)+'</p>');
  html+=panel('Enlaces de referencia',info.links.map(([label,link])=>'<p><a target="_blank" rel="noopener noreferrer" href="'+E(link)+'">'+E(label)+' ↗</a></p>').join(''));
