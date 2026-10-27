@@ -53,6 +53,7 @@ test('la portada es configurable y las galerías requieren publicación autoriza
   let html=await response.text();
   assert.equal((html.match(/<article class="vl-destination">/g)||[]).length,3);
   assert.match(html,/Aprender en Europa/);
+  assert.match(html,/photo-1555881400-74d7acaacd8b/);
   assert.match(html,/2026–2027/);
   assert.match(html,/href="\/acceso"/);
   assert.match(html,/href="\/registro"/);

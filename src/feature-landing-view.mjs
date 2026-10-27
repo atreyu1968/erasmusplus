@@ -106,7 +106,8 @@ export function renderVisitorLanding({ settings = {}, editionLabel = '', destina
   const eyebrow = settings.eyebrow || 'Erasmus+ · Formación profesional';
   const heroTitle = settings.heroTitle || 'Aprender en Europa. Crecer desde Tenerife.';
   const heroDescription = settings.heroDescription || 'Movilidades para descubrir nuevas formas de trabajar, ampliar horizontes y llevar lo aprendido de vuelta al aula y al oficio.';
-  const heroImage = safeUrl(settings.heroImageUrl);
+  const heroImage = safeUrl(settings.heroImageUrl) ||
+    'https://images.unsplash.com/photo-1555881400-74d7acaacd8b?auto=format&fit=crop&w=1500&q=85';
   const validDestinations = Array.isArray(destinations) ? destinations : [];
   const validGallery = Array.isArray(galleryItems) ? galleryItems : [];
   const currentEdition = editionLabel || 'Edición vigente';
@@ -129,9 +130,8 @@ export function renderVisitorLanding({ settings = {}, editionLabel = '', destina
     renderSocial('YouTube', settings.socialYoutube, 'YouTube')
   ].filter(Boolean).join('');
 
-  const heroArt = heroImage
-    ? '<div class="vl-hero-art"><img src="' + escapeHtml(heroImage) + '" alt="" aria-hidden="true"><span class="vl-art-label">IES MMG · Tenerife</span></div>'
-    : '<div class="vl-hero-art vl-hero-art-empty" aria-hidden="true"><svg viewBox="0 0 620 520" preserveAspectRatio="xMidYMid slice"><path d="M-40 345C102 210 192 430 318 292S483 108 672 191" fill="none" stroke="#a6d9dc" stroke-width="2" stroke-dasharray="4 10"/><path d="M30 420C148 327 201 177 339 202S500 329 643 73" fill="none" stroke="#ffffff55" stroke-width="1"/><circle cx="116" cy="286" r="7" fill="#12a5a5"/><circle cx="492" cy="169" r="7" fill="#fff"/></svg><span class="vl-art-label">IES MMG · Tenerife</span></div>';
+  const heroArt =
+    '<div class="vl-hero-art"><img src="' + escapeHtml(heroImage) + '" alt="" aria-hidden="true"><span class="vl-art-label">IES MMG · Tenerife</span></div>';
 
   const destinationContent = validDestinations.length
     ? '<div class="vl-destination-grid">' + validDestinations.map(renderDestination).join('') + '</div>'

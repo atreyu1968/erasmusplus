@@ -138,7 +138,7 @@ function settingsForm(req,api,settings,message='') {
     '<label>Descripción de bienvenida<textarea name="hero_description" rows="4" maxlength="1000">'+E(settings.hero_description)+'</textarea></label>'+
     '<label>Imagen de portada <input type="file" name="hero_image" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG o WebP; máximo 6 MB.</small></label>'+
     '<label class="checkbox"><input type="checkbox" name="hero_image_consent" value="yes">Confirmo que existe autorización institucional para publicar esta imagen.</label>'+
-    (settings.hero_file_id?'<div class="landing-image-preview"><img src="/landing-media/'+settings.hero_file_id+'?preview=1" alt="Imagen actual de portada"><label class="checkbox"><input type="checkbox" name="remove_hero_image" value="yes">Quitar imagen y usar la ilustración predeterminada</label></div>':'')+
+    (settings.hero_file_id?'<div class="landing-image-preview"><img src="/landing-media/'+settings.hero_file_id+'?preview=1" alt="Imagen actual de portada"><label class="checkbox"><input type="checkbox" name="remove_hero_image" value="yes">Quitar imagen y recuperar la fotografía original de Oporto</label></div>':'')+
     '<h2>Textos de las secciones</h2>'+
     input('Título de la sección informativa','about_title',settings.about_title,'text','maxlength="160"')+
     '<label>Texto informativo<textarea name="about_text" rows="4" maxlength="1200">'+E(settings.about_text)+'</textarea></label>'+
