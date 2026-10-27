@@ -19,6 +19,8 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Instalar dependencias
+        run: npm install --ignore-scripts --no-audit --no-fund
       - name: Verificar sintaxis
         run: |
           node --check src/server.mjs
