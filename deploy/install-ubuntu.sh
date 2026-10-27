@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# Instalador supervisado Ubuntu 22.04/24.04/26.04. No modifica Cloudflare Tunnel.
+# Instalador no interactivo Ubuntu 22.04/24.04/26.04. Solo pide el primer coordinador si falta.
 set -Eeuo pipefail
 umask 077
 export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=l APT_LISTCHANGES_FRONTEND=none UCF_FORCE_CONFFOLD=1
+APT_DPKG_OPTIONS=(-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 log() { printf '\n[ERASMUS-MMG] %s\n' "$*"; }
 die() { printf '\n[ERASMUS-MMG] ERROR: %s\n' "$*" >&2; exit 1; }
+apt_install() { apt-get "${APT_DPKG_OPTIONS[@]}" install -y "$@"; }
+trap 'unset MMG_ADMIN_USERNAME MMG_ADMIN_EMAIL MMG_ADMIN_PASSWORD' EXIT
 
 [[ "$EUID" == 0 ]] || die 'Ejecuta: sudo bash deploy/install-ubuntu.sh'
 [[ -f /etc/os-release ]] || die 'No se ha podido identificar Ubuntu.'
@@ -24,6 +28,10 @@ ARCH=$(dpkg --print-architecture)
 [[ "$ARCH" == amd64 || "$ARCH" == arm64 ]] || die "Arquitectura no admitida: $ARCH"
 command -v systemctl >/dev/null || die 'Este Ubuntu debe ejecutarse con systemd.'
 [[ -d /opt/erasmusplus && -L /opt/erasmusplus/current ]] && log 'Instalación detectada: se respetará la configuración existente.'
+if [[ ! -L /opt/erasmusplus/current && ! -t 0 ]] &&
+   [[ -z "${MMG_ADMIN_USERNAME:-}" || -z "${MMG_ADMIN_EMAIL:-}" || -z "${MMG_ADMIN_PASSWORD:-}" ]]; then
+  die 'Primera instalación sin terminal: define MMG_ADMIN_USERNAME, MMG_ADMIN_EMAIL y MMG_ADMIN_PASSWORD mediante un gestor seguro, o ejecuta el instalador en una terminal.'
+fi
 
 SOURCE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 [[ -f "$SOURCE_DIR/update-ubuntu.sh" ]] || die 'El paquete de despliegue no está completo.'
@@ -31,7 +39,7 @@ log "Ubuntu $VERSION_ID: actualizando índices APT e instalando requisitos bási
 if ! apt-get update; then
   die 'No se pudieron actualizar los índices APT. Revisa repositorios, DNS, certificados y soporte de Ubuntu antes de continuar.'
 fi
-apt-get install -y ca-certificates curl git gnupg openssl age unattended-upgrades
+apt_install ca-certificates curl git gnupg openssl age unattended-upgrades
 
 if [[ ! -x /usr/bin/node ]] || [[ "$(/usr/bin/node --version)" != v24.* ]]; then
   log 'Instalando Node.js 24 desde repositorio APT de NodeSource firmado.'
@@ -61,7 +69,7 @@ Pin: origin deb.nodesource.com
 Pin-Priority: 600
 EOF
   apt-get update
-  apt-get install -y nodejs
+  apt_install nodejs
 fi
 [[ -x /usr/bin/node && "$(/usr/bin/node --version)" == v24.* ]] || die 'Se requiere Node.js 24 instalado en /usr/bin/node.'
 command -v npm >/dev/null || die 'No se ha encontrado npm.'
@@ -142,7 +150,7 @@ log 'Instalando la primera versión con pruebas y comprobación local de salud.'
 /usr/local/sbin/erasmusplus-update
 log 'Instalación terminada.'
 printf '%s\n' \
- 'Siguiente paso: sudo /usr/local/sbin/erasmusplus-init-admin' \
+ 'La cuenta de coordinación se comprueba automáticamente; solo se solicita su alta si todavía no existe.' \
  'Comprobar servicio: systemctl status erasmusplus --no-pager' \
  'Comprobar origen del túnel: curl -fsS http://127.0.0.1:3000/healthz' \
  'Cloudflare Tunnel está en OTRO contenedor: configurar HOST=IP_PRIVADA_UBUNTU en /etc/erasmusplus/erasmusplus.env.' \

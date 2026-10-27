@@ -59,7 +59,7 @@ systemctl status erasmusplus --no-pager
 /usr/local/sbin/erasmusplus-init-admin
 ```
 
-La respuesta de salud debe ser `ok`. La instalación inicial mantiene el registro de usuarios deshabilitado; el acceso externo desde otro contenedor Proxmox mediante Cloudflare se configura después con la IP privada de Ubuntu.
+La respuesta de salud debe ser `ok`. El asistente de coordinación es idempotente: si ya existe un coordinador, no vuelve a pedir datos ni crea otra cuenta. La instalación inicial mantiene el registro de usuarios deshabilitado; el acceso externo desde otro contenedor Proxmox mediante Cloudflare se configura después con la IP privada de Ubuntu.
 
 ## Instalación confirmada: contenedor Ubuntu 26.04 en Proxmox
 
@@ -77,7 +77,7 @@ bash deploy/install-ubuntu.sh
 
 Si no existe ese repositorio, usa `git clone https://github.com/atreyu1968/erasmusplus.git` desde `/root`, entra en `erasmusplus` y ejecuta `bash deploy/install-ubuntu.sh`.
 
-Tras instalar, crea el coordinador con `/usr/local/sbin/erasmusplus-init-admin`, comprueba `curl -fsS http://127.0.0.1:3000/healthz`, configura `HOST` con la IP privada real del Ubuntu y limita TCP 3000 a la IP del contenedor Cloudflare. La ruta Cloudflare debe usar **`http://IP_PRIVADA_UBUNTU:3000`**, no `127.0.0.1`.
+Tras instalar, el instalador comprueba si existe el coordinador y solicita sus datos por terminal solo si falta. Comprueba `curl -fsS http://127.0.0.1:3000/healthz`, configura `HOST` con la IP privada real del Ubuntu y limita TCP 3000 a la IP del contenedor Cloudflare. La ruta Cloudflare debe usar **`http://IP_PRIVADA_UBUNTU:3000`**, no `127.0.0.1`.
 
 El procedimiento y el ejemplo de cortafuegos están en [Cloudflare Tunnel en otro contenedor Proxmox](deploy/CLOUDFLARE_TUNNEL.md).
 
@@ -118,21 +118,30 @@ Los dos primeros comandos instalan precisamente las herramientas que faltan. **N
 
 El instalador realiza automáticamente estas operaciones:
 
-1. Verifica Ubuntu y actualiza índices APT; instala `git`, `curl`, certificados, GnuPG, `age`, OpenSSL y herramientas de actualización.
+1. Verifica Ubuntu y actualiza índices APT; instala `git`, `curl`, certificados, GnuPG, `age`, OpenSSL y herramientas de actualización en modo no interactivo, conservando los archivos de configuración locales.
 2. Instala **Node.js 24** mediante el repositorio APT firmado de NodeSource, si no existe una versión adecuada. Usa su clave GPG y comprueba la versión al terminar.
 3. Crea el usuario limitado `erasmusmmg`, las carpetas privadas y los servicios `systemd`.
 4. Genera `MMG_SECRET` aleatorio y conserva cualquier configuración privada ya existente.
 5. Crea claves `age` para cifrar las copias de seguridad; **guarda una copia offline** de la clave privada bajo custodia institucional.
 6. Descarga el código, verifica sintaxis, instala dependencias mediante `npm ci` y ejecuta las pruebas automáticas antes de activar el servicio.
 7. Instala el actualizador diario, inicialmente en modo **sin aplicación automática** por seguridad.
+8. Comprueba si existe una cuenta de coordinación y solicita los datos solo si hace falta.
 
-### Crear la primera cuenta de coordinación
+### Alta de la primera cuenta de coordinación
 
 ```bash
 sudo /usr/local/sbin/erasmusplus-init-admin
 ```
 
-El asistente solicita identificador, correo institucional y contraseña (oculta mientras se escribe). No guarda la contraseña en archivos de configuración. Solo se puede crear la primera cuenta de coordinación mediante consola.
+En una instalación nueva, el instalador ejecuta este asistente después de comprobar que el servicio está operativo. Solicita identificador, correo institucional y contraseña (oculta mientras se escribe y confirmada dos veces). No guarda los datos en archivos de configuración. Si ya existe un coordinador, no solicita nada ni crea otra cuenta.
+
+La instalación y actualización no requieren respuestas de APT ni reinician el servidor. Si se ejecutan sin terminal y todavía no existe un coordinador, deben recibir `MMG_ADMIN_USERNAME`, `MMG_ADMIN_EMAIL` y `MMG_ADMIN_PASSWORD` desde un gestor de secretos; no incluyas contraseñas en argumentos de comandos ni en archivos del repositorio. Al usar `sudo`, conserva solo esas variables de entorno, por ejemplo:
+
+```bash
+sudo --preserve-env=MMG_ADMIN_USERNAME,MMG_ADMIN_EMAIL,MMG_ADMIN_PASSWORD bash deploy/install-ubuntu.sh
+```
+
+Sin terminal ni esos datos, el instalador inicial se detiene antes de modificar el sistema y el actualizador se detiene antes de cambiar la aplicación. El alta manual sigue disponible ejecutando el asistente anterior en una terminal.
 
 ### Comprobar el servicio
 
@@ -203,6 +212,8 @@ sudo systemctl disable --now erasmusplus-update.timer
 
 Una actualización automática toma la rama `main`; por ello es imprescindible proteger la rama, revisar las contribuciones y exigir CI satisfactorio. **No activar despliegues automáticos sobre expedientes reales mientras la aplicación no supere su auditoría de seguridad.** El actualizador no realiza actualizaciones de sistema operativo ni reinicios del servidor.
 
+El actualizador no espera entrada interactiva. Si detecta que falta la cuenta de coordinación, cancela la actualización antes de cambiar la versión; el administrador puede crearla manualmente en una terminal o ejecutar el actualizador con los tres datos inyectados desde un gestor de secretos.
+
 ## 5. Datos y copias de seguridad
 
 | Elemento | Ruta en Ubuntu |
@@ -217,14 +228,70 @@ Una actualización automática toma la rama `main`; por ello es imprescindible p
 
 Las copias creadas en cada actualización se cifran con **age** y se conservan localmente un máximo aproximado de 14 días. Esto **no sustituye** una política de backups diarios, externos y ensayos de restauración. Guardar **fuera del servidor**, de forma segura y separada, la clave privada `backup-identity.txt` y una copia de la configuración. Si se pierde la clave de recuperación no será posible descifrar las copias. Un responsable TIC deberá verificar periódicamente la restauración en un entorno aislado.
 
-## 6. Funciones existentes
+## 6. Guía de uso y funciones de la aplicación
 
-- Acceso por perfiles alumnado, profesorado y coordinación, verificación institucional con Resend, aprobación manual, recuperación de contraseña y passkeys opcionales.
-- Candidaturas Erasmus+ corta, Dual-Erasmus+ y Job Shadowing, PDFs privados, valoración manual y consulta de resultados.
-- Gestión de grupos, agenda de actividades y tareas con seguimiento de cada participante.
-- Notificaciones y adjuntos, chat de grupos y comunicación con coordinación, con política transparente y auditoría.
-- Compromisos de participación, documentación y autorizaciones de menores con PDF rellenable y revisión manual.
-- Destinos Portugal y Países Bajos, modalidades, normativa, panel personal adaptativo y PWA inicial.
+Esta guía describe las funciones disponibles en la versión actual. La aplicación continúa en desarrollo: no introduzcas datos personales reales hasta completar la revisión técnica, institucional y de protección de datos descrita más abajo.
+
+### Acceso y alta de cuentas
+
+- **Visitas sin cuenta:** la portada `/` muestra información del proyecto y los destinos publicados para la edición vigente. Usa **Solicitar cuenta** para abrir `/registro` o **Iniciar sesión** para ir a `/acceso`.
+- **Registro:** solo se aceptan altas cuando hay una convocatoria vigente, el registro está abierto y coordinación ha configurado Resend y aprobado el aviso de privacidad. El correo debe ser institucional `@canariaseducacion.es`. El usuario de docentes es su DNI; el del alumnado, su CIAL. El registro vincula la cuenta a la convocatoria vigente en ese momento.
+- **Verificación y aprobación:** la persona usuaria confirma el correo recibido. La cuenta no puede iniciar sesión hasta que coordinación también la apruebe. Si no llega el correo, utiliza **Reenviar verificación**; consulta con coordinación si el registro aparece deshabilitado.
+- **Protección de datos de menores:** las personas adultas registran electrónicamente que han recibido y leído el aviso. Para menores de 18 años, la persona representante legal debe completar y subir el modelo PDF recibido por correo. Coordinación revisa la documentación antes de aprobar la cuenta.
+- **Inicio y recuperación:** accede con DNI o CIAL y contraseña en `/acceso`. En caso de pérdida de contraseña, solicita un enlace en **Restablecer contraseña**. Las passkeys son opcionales y solo estarán disponibles si se han configurado.
+
+### Alumnado y profesorado
+
+Después de iniciar sesión, el panel `/panel` muestra la convocatoria asignada, las candidaturas, los grupos, las tareas pendientes, los avisos y las próximas actividades.
+
+#### Presentar una candidatura
+
+1. Abre **Candidatura Erasmus** desde el menú.
+2. Selecciona una modalidad, familia profesional y destino disponibles para la edición vigente; completa la motivación (mínimo 30 caracteres).
+3. El alumnado indica también si tiene beca MEC. Las modalidades elegibles dependen del perfil: alumnado puede solicitar movilidad corta o larga; docentes, movilidad corta o Job Shadowing. Además, coordinación debe haber habilitado la modalidad para ese destino y convocatoria.
+4. Elige **Guardar borrador** para continuar más tarde o **Presentar candidatura** para entregar la solicitud.
+5. Al presentar, se genera un PDF privado que refleja las respuestas entregadas. La candidatura presentada no se puede modificar desde el formulario; si detectas un error, contacta con coordinación.
+
+Solo se puede presentar si la cuenta pertenece a la convocatoria vigente. Cambiar de curso no traslada automáticamente las cuentas ni las candidaturas anteriores; coordinación debe revisar la asignación.
+
+#### Otras funciones personales
+
+- **Destinos, modalidades y normativa:** consulta destinos, información general del programa, modalidades y referencias de viaje disponibles para tu convocatoria.
+- **Agenda y tareas:** abre una movilidad asignada para consultar actividades, fechas, lugares e instrucciones. Marca una tarea como realizada cuando la hayas completado; coordinación puede consultar el avance del grupo.
+- **Compromisos:** lee el texto de participación y, si procede, registra el acuse electrónico. Se genera un PDF. Este acuse es informativo y no sustituye una autorización parental, una firma cualificada ni otros documentos exigidos.
+- **Documentación:** consulta los PDF de tus candidaturas y compromisos, y los documentos que hayas adjuntado. Puedes entregar archivos PDF, JPG, PNG, WEBP o DOCX de hasta 6 MB; coordinación podrá consultarlos.
+- **Notificaciones:** lee avisos destinados a todo el mundo o específicamente a alumnado o docentes, y descarga sus adjuntos.
+- **Chat interno:** escribe a coordinación o a personas autorizadas de tus grupos. Las conversaciones pueden ser supervisadas por coordinación según el protocolo del centro; los accesos quedan registrados.
+- **Mi perfil:** actualiza teléfono, centro y datos académicos. El alumnado también puede actualizar el teléfono familiar y el correo Gmail. Para cambiar la contraseña, usa la recuperación por correo.
+
+### Coordinación
+
+El menú de coordinación solo aparece para cuentas con ese perfil. La página **Control de cuentas** permite consultar participantes, convocatoria asignada, verificación de correo, estado y documentación pendiente.
+
+#### Preparar una nueva convocatoria
+
+1. En **Ediciones y destinos**, crea una edición académica. Se crea inactiva para poder prepararla sin cambiar la convocatoria vigente.
+2. Añade sus destinos y configura modalidades y familias profesionales disponibles. Los destinos archivados se conservan para mantener el historial.
+3. Cuando la edición tenga al menos un destino activo, pulsa **Activar**. La portada y el formulario de candidaturas mostrarán los destinos activos de la edición vigente.
+4. Aprueba las cuentas cuyo correo y trámite de privacidad estén verificados. Las cuentas existentes conservan su edición asignada aunque cambie la edición vigente; para moverlas, usa **Reasignar cuentas entre convocatorias**, revisa la lista y confirma el traslado. Las candidaturas históricas permanecen en la convocatoria donde se presentaron. Después de un traslado, revisa también los grupos asignados: cada persona solo puede consultar grupos de su convocatoria.
+5. En **Grupos de movilidad**, crea los grupos indicando convocatoria, destino y modalidad. Añade únicamente cuentas aprobadas de esa misma convocatoria. Si cambias un grupo de convocatoria, revisa primero el resumen de efectos y confirma solo si corresponde; el cambio no traslada las cuentas.
+6. En la agenda de cada grupo, publica actividades y tareas. Las personas participantes verán las fechas y podrán marcar tareas realizadas.
+
+#### Cuentas, candidaturas y documentación
+
+- **Cuentas:** aprueba o desactiva solicitudes; abre la ficha para editar datos y asignación. Solo puede aprobarse una cuenta después de verificar el correo y completar el trámite de privacidad. Cambiar el correo institucional obliga a verificarlo de nuevo y deja la cuenta pendiente. La anonimización es irreversible: úsala solo después de comprobar las obligaciones de conservación y confirmar el motivo.
+- **Candidaturas recibidas:** filtra por convocatoria y estado, abre el expediente y descarga el PDF original. Guarda una decisión manual —en valoración, preseleccionada, seleccionada, en reserva o no seleccionada— con una justificación obligatoria. Las puntuaciones opcionales son manuales: la aplicación no puntúa ni selecciona automáticamente. El listado se puede exportar a CSV.
+- **Archivo documental:** consulta los PDF de candidaturas y compromisos y los archivos adjuntos. La baja de un documento exige una justificación y confirmación; comprueba antes que la eliminación proceda.
+- **Autorizaciones de menores:** revisa los PDF enviados por representantes legales y registra la decisión. La cuenta no debe aprobarse hasta completar esta revisión.
+- **Crear cuenta:** permite añadir manualmente alumnado o docentes; estas cuentas también deben verificar su correo y completar los pasos de privacidad antes de ser aprobadas.
+
+#### Comunicación y correo
+
+- **Notificaciones:** publica avisos para todo el mundo, solo alumnado o solo docentes; puedes adjuntar un documento o imagen. Si Resend está configurado, se pone un correo institucional en cola para cada destinatario aprobado.
+- **Chat y supervisión:** el chat muestra las conversaciones permitidas y ofrece herramientas de supervisión. Informa a las personas usuarias del protocolo del centro y consulta las conversaciones únicamente con la autorización correspondiente.
+- **Configurar Resend:** guarda la configuración cifrada, valida el dominio remitente en Resend y utiliza el botón de prueba antes de abrir el registro o enviar comunicaciones reales.
+
+Para proteger los datos y evitar candidaturas sin destino, sigue este orden: **crear edición → preparar destinos → activar convocatoria → asignar cuentas → crear grupos → publicar agenda y tareas → revisar candidaturas**.
 
 ## 7. Limitaciones y obligaciones antes de producción
 

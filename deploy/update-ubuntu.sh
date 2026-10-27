@@ -3,6 +3,7 @@
 set -Eeuo pipefail
 umask 077
 export DEBIAN_FRONTEND=noninteractive GIT_TERMINAL_PROMPT=0
+trap 'unset MMG_ADMIN_USERNAME MMG_ADMIN_EMAIL MMG_ADMIN_PASSWORD' EXIT
 
 BASE=/opt/erasmusplus
 RELEASES="$BASE/releases"
@@ -94,6 +95,48 @@ rollback() {
 }
 trap rollback ERR INT TERM
 
+install_admin_helper() {
+  local source_file=$1
+  [[ -f "$source_file" ]] || die "Falta el asistente de coordinación en $source_file."
+  install -m 0750 "$source_file" /usr/local/sbin/.erasmusplus-init-admin.next
+  mv -fT /usr/local/sbin/.erasmusplus-init-admin.next /usr/local/sbin/erasmusplus-init-admin
+}
+
+if [[ "${1:-}" == "--scheduled" && ! -L "$CURRENT" ]]; then
+  die 'No hay una versión instalada. Ejecuta primero el instalador de Ubuntu en una terminal.'
+fi
+if [[ -L "$CURRENT" ]]; then
+  if ! ADMIN_STATE=$(cd "$CURRENT" && runuser -u erasmusmmg -- /usr/bin/env MMG_DATA_DIR="$DATA" \
+    /usr/bin/node --input-type=module -e '
+      const {get}=await import("./src/db.mjs");
+      const row=get("SELECT 1 FROM users WHERE role = ? LIMIT 1","coordinator");
+      process.stdout.write(row ? "present" : "missing");
+    '); then
+    die 'No se pudo comprobar si existe una cuenta de coordinación.'
+  fi
+  case "$ADMIN_STATE" in
+    present) ;;
+    missing)
+      if [[ ! -t 0 ]]; then
+        ADMIN_USERNAME_CHECK=${MMG_ADMIN_USERNAME:-}
+        ADMIN_USERNAME_CHECK=${ADMIN_USERNAME_CHECK//[[:space:]]/}
+        [[ -n "$ADMIN_USERNAME_CHECK" &&
+           -n "${MMG_ADMIN_EMAIL:-}" &&
+           -n "${MMG_ADMIN_PASSWORD:-}" ]] ||
+          die 'No existe una cuenta de coordinación y esta actualización no tiene terminal. Ejecuta erasmusplus-init-admin en una terminal o proporciona las tres variables mediante un gestor seguro.'
+        unset ADMIN_USERNAME_CHECK
+        [[ "$MMG_ADMIN_EMAIL" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] ||
+          die 'MMG_ADMIN_EMAIL no tiene un formato válido; no se ha actualizado la aplicación.'
+        [[ "${#MMG_ADMIN_PASSWORD}" -ge 16 ]] ||
+          die 'MMG_ADMIN_PASSWORD debe tener al menos 16 caracteres; no se ha actualizado la aplicación.'
+      else
+        log 'No existe una cuenta de coordinación; el asistente la solicitará al terminar.'
+      fi
+      ;;
+    *) die 'Respuesta inesperada al comprobar la cuenta de coordinación.' ;;
+  esac
+fi
+
 OLD_SHA=''
 [[ -f "$CURRENT/.revision" ]] && OLD_SHA=$(<"$CURRENT/.revision")
 [[ -L "$CURRENT" ]] && PREVIOUS=$(readlink -f "$CURRENT")
@@ -104,12 +147,15 @@ NEW_SHA=$(git -C "$STAGE" rev-parse HEAD)
 [[ "$NEW_SHA" =~ ^[0-9a-f]{40}$ ]] || die 'SHA de Git incorrecto.'
 if [[ "$NEW_SHA" == "$OLD_SHA" ]]; then
   log "Ya está instalado $NEW_SHA"
+  install_admin_helper "$STAGE/deploy/init-admin-ubuntu.sh"
   rm -rf -- "$STAGE"
   STAGE=''
   trap - ERR INT TERM
+  /usr/local/sbin/erasmusplus-init-admin
   exit 0
 fi
 [[ -f "$STAGE/package-lock.json" ]] || die 'Falta package-lock.json, se cancela la actualización.'
+[[ -f "$STAGE/deploy/init-admin-ubuntu.sh" ]] || die 'Falta el asistente de coordinación, se cancela la actualización.'
 log "Validando versión $NEW_SHA antes de detener el servicio."
 (
   cd "$STAGE"
@@ -164,9 +210,11 @@ SWITCHED=0
 STOPPED=0
 trap - ERR INT TERM
 log "Nueva versión operativa: $NEW_SHA. Cloudflare Tunnel no se ha modificado."
-# Renovar el propio actualizador solo después de validar el arranque.
+# Renovar el actualizador y el asistente de coordinación solo después de validar el arranque.
 if [[ -f "$FINAL/deploy/update-ubuntu.sh" ]]; then
   install -m 0750 "$FINAL/deploy/update-ubuntu.sh" /usr/local/sbin/.erasmusplus-update.next
   mv -fT /usr/local/sbin/.erasmusplus-update.next /usr/local/sbin/erasmusplus-update
 fi
+install_admin_helper "$FINAL/deploy/init-admin-ubuntu.sh"
+/usr/local/sbin/erasmusplus-init-admin
 find "$BACKUP_DIR" -maxdepth 1 -name 'pre-update-*.tar.gz.age' -type f -mtime +14 -delete
