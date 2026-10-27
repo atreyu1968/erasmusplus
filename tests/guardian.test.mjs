@@ -95,9 +95,15 @@ test('Menor: modelo PDF, entrega y validación manual obligatoria',async()=>{
   assert.match(guardianHtml,/Representante de Ejemplo/);
   const docId=guardianHtml.match(/name="id" value="(\d+)"/)?.[1];
   assert.ok(docId);
-  const review=await fetch(base+'/coordinacion/privacidad/revisar',{method:'POST',
+  const missingProof=await fetch(base+'/coordinacion/privacidad/revisar',{method:'POST',
    headers:{Cookie:session,'Content-Type':'application/x-www-form-urlencoded'},
    body:new URLSearchParams({csrf:tokenAdmin,id:docId,status:'approved'})});
+  assert.equal(missingProof.status,200);
+  assert.match(await missingProof.text(),/Para aprobar debes indicar cómo verificaste identidad/);
+  const review=await fetch(base+'/coordinacion/privacidad/revisar',{method:'POST',
+   headers:{Cookie:session,'Content-Type':'application/x-www-form-urlencoded'},
+   body:new URLSearchParams({csrf:tokenAdmin,id:docId,status:'approved',
+     check_method:'in_person',check_note:'Documento comprobado presencialmente con representante.'})});
   assert.equal(review.status,200);
   assert.match(await review.text(),/Documento revisado/);
   const approve=await fetch(base+'/coordinacion/estado',{method:'POST',
