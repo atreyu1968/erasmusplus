@@ -10,8 +10,8 @@ test('the right-side content scroll starts below the fixed header', () => {
   assert.match(styles, /\.topbar\{[^}]*position:sticky;top:0;[^}]*z-index:20/s);
   assert.match(styles, /\.shell\{[^}]*height:100vh;height:100dvh;[^}]*overflow:hidden\}/s);
   assert.match(styles, /\.workspace\{[^}]*grid-row:2;[^}]*overflow-y:auto/s);
-  assert.match(styles, /\.public-shell\{[^}]*grid-template-rows:64px minmax\(0,1fr\)/);
-  assert.match(styles, /@media\(max-width:750px\)\{\s*\.public-shell\{[^}]*grid-template-rows:58px minmax\(0,1fr\)/);
+  assert.match(styles, /\.public-shell\{[^}]*grid-template-rows:48px minmax\(0,1fr\)/);
+  assert.match(styles, /@media\(max-width:750px\)\{[^}]*\.public-shell\{[^}]*grid-template-rows:46px minmax\(0,1fr\)/);
 });
 
 function mountSidebar(savedState = null, canHover = true) {
