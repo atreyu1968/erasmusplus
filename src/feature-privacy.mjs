@@ -3,6 +3,7 @@ import { get, all, run, audit, db } from './db.mjs';
 import { cookie, cookies, canTry, countTry } from './auth.mjs';
 import { sendMail, publicUrl } from './mailer.mjs';
 import { makePdf } from './pdf.mjs';
+import { makeFillableGuardianPdf } from './guardian-fillable-pdf.mjs';
 import {
   escape as E, clean, validId, panel, heading, formEnd, storeUpload, multipart, queueMail
 } from './feature-service.mjs';
@@ -293,7 +294,7 @@ export async function privacyRoutes(req,url,method,api){
  if(url==='/privacidad/modelo.pdf'&&method==='GET'){
    const user=guardianSession(req);
    if(!user){portalUnavailable(req,api);return true;}
-   const pdf=documentForGuardian(user);
+   const pdf=await makeFillableGuardianPdf(user);
    api.raw(req,200,pdf,'application/pdf',{'Content-Disposition':'attachment; filename="MMG_autorizacion_representante_legal.pdf"'});
    audit(user.id,'guardian_template_downloaded',user.id);return true;
  }
