@@ -8,7 +8,7 @@ import os from 'node:os';
 const data=mkdtempSync(path.join(os.tmpdir(),'mmg-test-'));
 const port=30000+Math.floor(Math.random()*25000);
 const base='http://127.0.0.1:'+port;
-const env={...process.env,MMG_DATA_DIR:data,HOST:'127.0.0.1',PORT:String(port),
+const env={...process.env,NO_COLOR:'1',FORCE_COLOR:'0',MMG_DATA_DIR:data,HOST:'127.0.0.1',PORT:String(port),
  MMG_ENV:'development',MMG_SECURE_COOKIE:'0',
  MMG_SECRET:'dev-test-secret-longer-than-48-characters---0123456789-ABCDEF',
   MMG_TEST_FIXTURES:'1',

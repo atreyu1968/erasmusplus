@@ -38,6 +38,8 @@ test('administrator bootstrap is idempotent and hides password input', () => {
 test('updater refreshes the bootstrap helper and avoids unattended prompts', () => {
   const updater = read('deploy/update-ubuntu.sh');
   assert.match(updater, /No existe una cuenta de coordinación y esta actualización no tiene terminal/);
+  assert.match(updater, /NO_COLOR=1 FORCE_COLOR=0/);
+  assert.match(updater, /trap - ERR INT TERM/);
   assert.match(updater, /install_admin_helper "\$STAGE\/deploy\/init-admin-ubuntu\.sh"/);
   assert.match(updater, /install_admin_helper "\$FINAL\/deploy\/init-admin-ubuntu\.sh"/);
   assert.match(updater, /\/usr\/local\/sbin\/erasmusplus-init-admin/);

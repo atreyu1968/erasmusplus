@@ -9,7 +9,7 @@ test('Valoración manual y agenda: seguridad por perfil, grupo y CSRF',async()=>
  const data=mkdtempSync(path.join(os.tmpdir(),'mmg-selection-'));
  const port=30000+Math.floor(Math.random()*22000),base='http://127.0.0.1:'+port;
  const password='MMG-PasswordPrueba-2026!';
- const env={...process.env,MMG_DATA_DIR:data,HOST:'127.0.0.1',PORT:String(port),
+  const env={...process.env,NO_COLOR:'1',FORCE_COLOR:'0',MMG_DATA_DIR:data,HOST:'127.0.0.1',PORT:String(port),
   MMG_ENV:'development',MMG_SECURE_COOKIE:'0',
   MMG_SECRET:'testing-features-long-secret-2026-01234567890123456789',
   MMG_ENABLE_REGISTRATION:'0',MMG_PRIVACY_VERSION:'PENDIENTE_REVISION',

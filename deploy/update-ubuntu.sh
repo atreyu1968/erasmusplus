@@ -158,6 +158,8 @@ fi
 [[ -f "$STAGE/deploy/init-admin-ubuntu.sh" ]] || die 'Falta el asistente de coordinación, se cancela la actualización.'
 log "Validando versión $NEW_SHA antes de detener el servicio."
 (
+  # El ERR trap de recuperación debe ejecutarse una sola vez en el proceso padre.
+  trap - ERR INT TERM
   cd "$STAGE"
   npm ci --omit=dev --ignore-scripts --no-audit --no-fund
   find src scripts -name '*.mjs' -print0 | xargs -0 -n1 node --check
@@ -167,7 +169,8 @@ log "Validando versión $NEW_SHA antes de detener el servicio."
   # Los directorios de release solo contienen código público y dependencias.
   chmod -R a+rX "$STAGE"
   chmod -R go-w "$STAGE"
-  runuser -u nobody -- env HOME=/tmp npm_config_cache=/tmp/mmg-npm-test-cache npm test
+  runuser -u nobody -- env HOME=/tmp NO_COLOR=1 FORCE_COLOR=0 \
+    npm_config_cache=/tmp/mmg-npm-test-cache npm test
 )
 printf '%s\n' "$NEW_SHA" > "$STAGE/.revision"
 chmod -R a+rX "$STAGE"
