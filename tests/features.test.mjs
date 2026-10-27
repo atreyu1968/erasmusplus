@@ -44,6 +44,19 @@ test('Docente y alumnado: permisos, candidatura y PDF',async()=>{
    await new Promise(r=>setTimeout(r,100));
   }
   assert.ok(started,'Servidor no arrancó: '+stderr);
+  const destinationsPage=await fetch(base+'/');
+  assert.equal(destinationsPage.status,200);
+  const destinationsHtml=await destinationsPage.text();
+  assert.match(destinationsHtml,/src="\/images\/viseu-cathedral\.jpg" alt="Fachada de la Catedral de Viseu con sus dos torres\."/);
+  assert.match(destinationsHtml,/src="\/images\/porto-ribeira\.jpg" alt="Barcos rabelos en el Duero frente al barrio de la Ribeira de Oporto\."/);
+  assert.match(destinationsHtml,/Pedro Ribeiro Simões[\s\S]*?CC BY 2\.0/);
+  assert.match(destinationsHtml,/Jakub Hałun[\s\S]*?CC BY 4\.0/);
+  for(const image of ['/images/viseu-cathedral.jpg','/images/porto-ribeira.jpg']){
+   const response=await fetch(base+image);
+   assert.equal(response.status,200);
+   assert.equal(response.headers.get('content-type'),'image/jpeg');
+   assert.equal(Buffer.from(await response.arrayBuffer()).toString('hex',0,2),'ffd8');
+  }
   const loginPage=await fetch(base+'/acceso');
   const html=await loginPage.text(),cookie=loginPage.headers.get('set-cookie')?.split(';')[0];
   const csrf=html.match(/name="csrf" value="([a-f0-9]+)"/)?.[1];
@@ -55,20 +68,29 @@ test('Docente y alumnado: permisos, candidatura y PDF',async()=>{
   assert.equal(response.status,303);
   const session=response.headers.get('set-cookie')?.split(';')[0];
   assert.ok(session);
+  for(const path of ['/destinos']){
+   const page=await fetch(base+path,{headers:{Cookie:session}});
+   assert.equal(page.status,200);
+   const html=await page.text();
+   assert.match(html,/src="\/images\/viseu-cathedral\.jpg" alt="Fachada de la Catedral de Viseu con sus dos torres\."/);
+   assert.match(html,/src="\/images\/porto-ribeira\.jpg" alt="Barcos rabelos en el Duero frente al barrio de la Ribeira de Oporto\."/);
+   assert.match(html,/Pedro Ribeiro Simões[\s\S]*?CC BY 2\.0/);
+   assert.match(html,/Jakub Hałun[\s\S]*?CC BY 4\.0/);
+  }
   const denied=await fetch(base+'/coordinacion',{headers:{Cookie:session}});
   assert.equal(denied.status,403);
   const candidate=await fetch(base+'/candidatura',{headers:{Cookie:session}});
   assert.equal(candidate.status,200);
   const candidateHtml=await candidate.text();
   const userCsrf=candidateHtml.match(/name="csrf" value="([a-f0-9]+)"/)?.[1];
-   const editionId=candidateHtml.match(/name="edition_id" value="(\d+)"/)?.[1];
-   assert.ok(userCsrf&&editionId);
+  const editionId=candidateHtml.match(/name="edition_id" value="(\d+)"/)?.[1];
+  assert.ok(userCsrf&&editionId);
   const submitted=await fetch(base+'/candidatura',{method:'POST',redirect:'manual',
    headers:{'Content-Type':'application/x-www-form-urlencoded',Cookie:session},
    body:new URLSearchParams({
       csrf:userCsrf,edition_id:editionId,mobility:'long|Movilidad larga Dual-Erasmus+',family:'Administración y gestión',
      destination:'Oporto',motivation:'Quiero realizar prácticas internacionales para mejorar mi formación profesional y mi autonomía personal.',
-     mec:'No',intent:'submit'
+      mec:'No',intent:'submit'
    })});
   assert.equal(submitted.status,200);
   const result=await submitted.text();

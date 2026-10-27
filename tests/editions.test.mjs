@@ -46,8 +46,8 @@ test('Las convocatorias separan destinos, cuentas y candidaturas conservando el 
   assert.doesNotMatch(visitorHtml,/class="sidebar"|class="sidebar-toggle"/);
   assert.match(visitorHtml,/class="brand-logo" src="\/erasmus-logo\.png"/);
   assert.match(visitorHtml,/rel="icon" type="image\/png"[^>]+erasmus-favicon-192\.png/);
-  assert.match(visitorHtml,/mmg-viseu-commons\.jpg/);
-  assert.match(visitorHtml,/CC BY-SA 3\.0/);
+   assert.match(visitorHtml,/viseu-cathedral\.jpg/);
+   assert.match(visitorHtml,/CC BY 2\.0/);
   for(const asset of ['erasmus-logo.png','erasmus-favicon-192.png','erasmus-favicon-512.png']){
    const response=await fetch(base+'/'+asset);
    assert.equal(response.status,200,asset+' debe servirse correctamente');
@@ -55,7 +55,7 @@ test('Las convocatorias separan destinos, cuentas y candidaturas conservando el 
   }
   const manifest=await (await fetch(base+'/manifest.webmanifest')).json();
   assert.ok(manifest.icons.some(icon=>icon.src==='/erasmus-favicon-192.png'));
-  const photo=await fetch(base+'/images/mmg-viseu-commons.jpg');
+   const photo=await fetch(base+'/images/viseu-cathedral.jpg');
   assert.equal(photo.status,200);
   assert.match(photo.headers.get('content-type')||'',/image\/jpeg/);
 

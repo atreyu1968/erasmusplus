@@ -84,11 +84,29 @@ function mustAdmin(req){if(!mustLogin(req))return false;if(req.auth.user.role!==
 function success(title,text){return '<div class="alert success"><strong>'+X(title)+'</strong><p>'+X(text)+'</p></div>';}
 function formAlert(text){return '<div class="alert">'+X(text)+'</div>';}
 const fallbackDestinationImages={
-  'Viseu':'/images/mmg-viseu-commons.jpg',
-  'Oporto':'/images/mmg-porto-commons.jpg',
-  'Róterdam':'https://images.unsplash.com/photo-1512470876302-972faa2aa9a4?auto=format&fit=crop&w=900&q=80'
+  'Viseu':{
+    url:'/images/viseu-cathedral.jpg',
+    image_alt:'Fachada de la Catedral de Viseu con sus dos torres.',
+    image_credit:'Pedro Ribeiro Simões',
+    image_source_url:'https://commons.wikimedia.org/wiki/File:Viseu_Cathedral_(49870949086).jpg',
+    image_license_name:'CC BY 2.0',
+    image_license_url:'https://creativecommons.org/licenses/by/2.0/',
+    image_note:'Recorte de encuadre en la tarjeta.'
+  },
+  'Oporto':{
+    url:'/images/porto-ribeira.jpg',
+    image_alt:'Barcos rabelos en el Duero frente al barrio de la Ribeira de Oporto.',
+    image_credit:'Jakub Hałun',
+    image_source_url:'https://commons.wikimedia.org/wiki/File:Rabelo_boats_and_Ribeira_seen_from_Cais_de_Gaia,_20250605_1623_9879.jpg',
+    image_license_name:'CC BY 4.0',
+    image_license_url:'https://creativecommons.org/licenses/by/4.0/',
+    image_note:'Recorte de encuadre en la tarjeta.'
+  },
+  'Róterdam':{url:'https://images.unsplash.com/photo-1512470876302-972faa2aa9a4?auto=format&fit=crop&w=900&q=80'}
 };
 const publicImageAssets={
+  '/images/viseu-cathedral.jpg':'image/jpeg',
+  '/images/porto-ribeira.jpg':'image/jpeg',
   '/images/mmg-viseu-commons.jpg':'image/jpeg',
   '/images/mmg-porto-commons.jpg':'image/jpeg',
   '/erasmus-logo.png':'image/png',
@@ -99,11 +117,22 @@ function imageCredit(destination){
  if(!destination.image_credit||!destination.image_source_url||!destination.image_license_url||!destination.image_license_name)return '';
  return '<small class="visitor-photo-credit">Foto: '+X(destination.image_credit)+' · <a href="'+X(destination.image_source_url)+'" target="_blank" rel="noopener noreferrer">Fuente</a> · <a href="'+X(destination.image_license_url)+'" target="_blank" rel="noopener noreferrer">'+X(destination.image_license_name)+'</a>'+(destination.image_note?' · '+X(destination.image_note):'')+'</small>';
 }
+function destinationMedia(destination){
+ const fallback=fallbackDestinationImages[destination.name];
+ const useFallback=!destination.image_url;
+ const hasCredit=destination.image_credit&&destination.image_source_url&&destination.image_license_url&&destination.image_license_name;
+ const creditData=hasCredit?destination:(useFallback&&fallback?fallback:destination);
+ return {
+   image:destination.image_url||fallback?.url||'',
+   alt:destination.image_alt||(useFallback&&fallback?.image_alt)||'Fotografía ilustrativa de '+destination.name,
+   credit:imageCredit(creditData)
+ };
+}
 function destinationCards(items=destinationsForEdition()){
  return items.length?'<div class="dest-grid">'+items.map(destination=>{
-   const image=destination.image_url||fallbackDestinationImages[destination.name]||'';
-   return '<article class="card destination">'+(image?'<img src="'+X(image)+'" alt="'+X(destination.image_alt||'Fotografía ilustrativa de '+destination.name)+'">':'<div class="destination-image-empty" aria-hidden="true"></div>')+
-    '<div><span class="eyebrow">'+X(destination.country)+'</span><h3>'+X(destination.name)+'</h3><p>'+X(destination.description)+'</p>'+imageCredit(destination)+'</div></article>';
+   const media=destinationMedia(destination);
+   return '<article class="card destination">'+(media.image?'<img src="'+X(media.image)+'" alt="'+X(media.alt)+'">':'<div class="destination-image-empty" aria-hidden="true"></div>')+
+    '<div><span class="eyebrow">'+X(destination.country)+'</span><h3>'+X(destination.name)+'</h3><p>'+X(destination.description)+'</p>'+media.credit+'</div></article>';
   }).join('')+'</div>':'<div class="card"><p>No hay destinos activos para la edición seleccionada.</p></div>';
 }
 function visitorArrow(diagonal=false){
@@ -112,12 +141,11 @@ function visitorArrow(diagonal=false){
 function landing(req){
   const edition=activeEdition(),destinations=edition?destinationsForEdition(edition.id):[];
   const cards=destinations.map((destination,index)=>{
-    const image=destination.image_url||fallbackDestinationImages[destination.name]||'';
+    const media=destinationMedia(destination);
     return '<article class="visitor-destination"><div class="visitor-destination-image">'+
-    (image?'<img src="'+X(image)+'" alt="'+X(destination.image_alt||'Fotografía ilustrativa de '+destination.name)+'" loading="lazy">':'<div class="visitor-destination-image-empty" aria-hidden="true"></div>')+
-    '<span class="visitor-destination-number">'+String(index+1).padStart(2,'0')+'</span><span class="visitor-destination-country">'+X(destination.country)+'</span></div><div class="visitor-destination-content"><h3>'+X(destination.name)+'</h3><p>'+X(destination.description)+'</p>'+imageCredit(destination)+'<a href="/registro" aria-label="Solicitar cuenta para informarse sobre '+X(destination.name)+'">Solicitar cuenta'+visitorArrow()+'</a></div></article>';
-  }
-  ).join('');
+    (media.image?'<img src="'+X(media.image)+'" alt="'+X(media.alt)+'" loading="lazy">':'<div class="visitor-destination-image-empty" aria-hidden="true"></div>')+
+    '<span class="visitor-destination-number">'+String(index+1).padStart(2,'0')+'</span><span class="visitor-destination-country">'+X(destination.country)+'</span></div><div class="visitor-destination-content"><h3>'+X(destination.name)+'</h3><p>'+X(destination.description)+'</p>'+media.credit+'<a href="/registro" aria-label="Solicitar cuenta para informarse sobre '+X(destination.name)+'">Solicitar cuenta'+visitorArrow()+'</a></div></article>';
+  }).join('');
   const editionLabel=edition?.label||'Sin edición activa';
   const countries=[...new Set(destinations.map(destination=>destination.country))].join(' y ');
   const content=
