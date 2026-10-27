@@ -23,6 +23,15 @@ db.exec(
   "expires_at INTEGER NOT NULL);" +
   "CREATE INDEX IF NOT EXISTS guardian_review_status ON guardian_documents(status);"
 );
+if (!db.prepare('PRAGMA table_info(guardian_documents)').all().some(x=>x.name==='representation_check_method')) {
+ db.exec("ALTER TABLE guardian_documents ADD COLUMN representation_check_method TEXT");
+}
+if (!db.prepare('PRAGMA table_info(guardian_documents)').all().some(x=>x.name==='representation_check_note')) {
+ db.exec("ALTER TABLE guardian_documents ADD COLUMN representation_check_note TEXT");
+}
+if (!db.prepare('PRAGMA table_info(guardian_documents)').all().some(x=>x.name==='representation_checked_at')) {
+ db.exec("ALTER TABLE guardian_documents ADD COLUMN representation_checked_at TEXT");
+}
 const policyFields=[
   'MMG_PRIVACY_CONTROLLER','MMG_PRIVACY_CONTACT','MMG_PRIVACY_DPO',
   'MMG_PRIVACY_LEGAL_BASIS','MMG_PRIVACY_RETENTION','MMG_PRIVACY_RECIPIENTS'
@@ -238,7 +247,15 @@ function reviewPage(req,api,msg=''){
  '<td><a href="/archivo/'+x.file_id+'">Revisar PDF firmado</a></td><td>'+E(x.status)+'</td>'+
  '<td>'+ (x.status==='pending'?'<form method="post" action="/coordinacion/privacidad/revisar">'+
  '<input type="hidden" name="id" value="'+x.id+'"><input type="hidden" name="csrf" value="'+E(api.csrf(req))+'">'+
- '<label>Observaciones<input name="note" maxlength="250" placeholder="Opcional"></label>'+
+ '<label>Comprobación de identidad y representación<select name="check_method">'+
+ '<option value="">Selecciona un procedimiento</option>'+
+ '<option value="existing_record">Datos acreditados previamente en el centro</option>'+
+ '<option value="in_person">Comprobación presencial del documento</option>'+
+ '<option value="digital_identity">Identificación electrónica autorizada</option>'+
+ '<option value="document_seen">Documentación justificativa examinada sin conservar copia</option>'+
+ '</select></label>'+
+ '<label>Constancia de la comprobación<input name="check_note" maxlength="350" placeholder="Explica brevemente cómo se verificó"></label>'+
+ '<label>Observaciones sobre autorización<input name="note" maxlength="250" placeholder="Opcional"></label>'+
  '<button class="btn small" name="status" value="approved">Aprobar</button> '+
  '<button class="btn small secondary" name="status" value="rejected">Rechazar</button></form>':'Revisado')+'</td></tr>');
  let body=heading('COORDINACIÓN · PRIVACIDAD','Autorizaciones de menores','Revisa el documento firmado y comprueba que quien firma tiene representación legal acreditable.');
@@ -248,14 +265,18 @@ function reviewPage(req,api,msg=''){
  api.layout(req,'Autorizaciones de menores',body);
 }
 function reviewPost(req,api,b){
- const id=validId(b.id),status=clean(b.status),note=clean(b.note,250);
+ const id=validId(b.id),status=clean(b.status),note=clean(b.note,250),method=clean(b.check_method,40),checkNote=clean(b.check_note,350);
  if(!id||!['approved','rejected'].includes(status)){reviewPage(req,api,'Acción de revisión inválida.');return;}
  const entry=get("SELECT d.*,u.institutional_email,u.first_name,u.status AS account_status FROM guardian_documents d JOIN users u ON u.id=d.user_id WHERE d.id=?",id);
  if(!entry||entry.status!=='pending'||entry.account_status!=='pending'){
   reviewPage(req,api,'El documento ya no está pendiente o la cuenta no admite cambios.');return;
  }
- run("UPDATE guardian_documents SET status=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE id=?",
-   status,req.auth.user.id,note,id);
+ if(status==='approved'&&(!['existing_record','in_person','digital_identity','document_seen'].includes(method)||checkNote.length<12)){
+  reviewPage(req,api,'Para aprobar debes indicar cómo verificaste identidad y representación legal, con una breve constancia. No se necesita adjuntar una copia del DNI por defecto.');return;
+ }
+ run("UPDATE guardian_documents SET status=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=?,"+
+ "representation_check_method=?,representation_check_note=?,representation_checked_at=CASE WHEN ?='approved' THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id=?",
+   status,req.auth.user.id,note,status==='approved'?method:null,status==='approved'?checkNote:null,status,id);
  audit(req.auth.user.id,'guardian_authorization_'+status,id);
  try{
   // No secret URLs stored in the outbox; status notifications contain no sensitive details.
