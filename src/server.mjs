@@ -9,6 +9,7 @@ import { settings, configureResend, sendMail, publicUrl } from './mailer.mjs';
 import crypto from 'node:crypto';
 import {extraRoute,startMailWorker} from './features.mjs';
 import {privacyReady,ageOnRegistration,acknowledgeAdult,clearance,emailGuardianLink} from './feature-privacy.mjs';
+import {activeEdition,destinationsForEdition} from './feature-service.mjs';
 
 const host=process.env.HOST || '127.0.0.1', port=Number(process.env.PORT || 3000);
 const isRegistrationOpen=() => process.env.MMG_ENABLE_REGISTRATION==='1' && privacyReady();
@@ -58,14 +59,15 @@ function layout(req,title,main,{publicPage=false,status=200,mainClass=''}={}){
   const user=req.auth?.user;
   const current=req.url.split('?')[0];
   const links=publicPage?[['/','⌂','Inicio'],['/acceso','⇥','Acceso'],['/registro','♙','Registro'],['/privacidad','§','Privacidad']]:
-    [...nav,...(user?.role==='coordinator'?[['/coordinacion','▦','Control de cuentas'],['/coordinacion/candidaturas','▤','Candidaturas recibidas'],['/coordinacion/documentos','▣','Archivo documental'],['/coordinacion/grupos','♙','Grupos de movilidad'],['/coordinacion/chat','✉','Supervisión de chat'],['/coordinacion/privacidad','✓','Autorizaciones de menores'],['/coordinacion/crear-cuenta','＋','Crear cuenta'],['/coordinacion/configuracion','⚙','Configurar Resend']]:[])];
+    [...nav,...(user?.role==='coordinator'?[['/coordinacion','▦','Control de cuentas'],['/coordinacion/ediciones','▦','Ediciones y destinos'],['/coordinacion/candidaturas','▤','Candidaturas recibidas'],['/coordinacion/documentos','▣','Archivo documental'],['/coordinacion/grupos','♙','Grupos de movilidad'],['/coordinacion/chat','✉','Supervisión de chat'],['/coordinacion/privacidad','✓','Autorizaciones de menores'],['/coordinacion/crear-cuenta','＋','Crear cuenta'],['/coordinacion/configuracion','⚙','Configurar Resend']]:[])];
   const sidebar=links.map(([href,icon,name],index)=>
     (user?.role==='coordinator'&&index===nav.length?'<span class="nav-divider">COORDINACIÓN</span>':'')+
     '<a class="nav'+(href===current?' current':'')+'" href="'+href+'" title="'+X(name)+'" aria-label="'+X(name)+'"><i aria-hidden="true">'+iconMarkup(icon)+'</i><span class="nav-label">'+X(name)+'</span></a>'
   ).join('');
   const sessionActions=user?postButton('Cerrar sesión','/salir',csrf(req)):'<a class="btn small" href="/acceso">Acceder</a>';
+  const edition=activeEdition();
   const page='<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#143e71"><title>'+X(title)+' · Erasmus+ MMG</title><link rel="stylesheet" href="/styles.css"><link rel="manifest" href="/manifest.webmanifest"></head><body>'+
-  '<div class="shell"><header class="topbar"><button class="sidebar-toggle" type="button" aria-label="Expandir menú" aria-controls="app-sidebar" aria-expanded="false" title="Expandir menú"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><a class="brand" href="/"><span class="mark">MMG+</span><span class="brand-copy"><b>Movilidades Erasmus+</b><small>IES Manuel Martín González</small></span></a><span class="course-label">CURSO 2026–2027</span><div class="user"><span class="avatar">'+X((user?.first_name||'E').slice(0,1))+'</span><span class="user-name">'+X(user?.first_name||'Visitante')+'</span>'+sessionActions+'</div></header>'+
+  '<div class="shell"><header class="topbar"><button class="sidebar-toggle" type="button" aria-label="Expandir menú" aria-controls="app-sidebar" aria-expanded="false" title="Expandir menú"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><a class="brand" href="/"><span class="mark">MMG+</span><span class="brand-copy"><b>Movilidades Erasmus+</b><small>IES Manuel Martín González</small></span></a><span class="course-label">'+X(edition?.label||'Sin edición activa')+'</span><div class="user"><span class="avatar">'+X((user?.first_name||'E').slice(0,1))+'</span><span class="user-name">'+X(user?.first_name||'Visitante')+'</span>'+sessionActions+'</div></header>'+
   '<aside class="sidebar" id="app-sidebar" aria-label="Navegación principal"><p class="side-label">GUÍA DE ISORA · TENERIFE</p><nav>'+sidebar+'</nav><div class="sidefooter">Enriqueciendo vidas.<br>Abriendo mentes.</div></aside>'+
   '<div class="workspace"><main'+(mainClass?' class="'+X(mainClass)+'"':'')+'>'+main+'<footer>Movilidades Erasmus+ MMG · Fase 1 de desarrollo. No introducir datos reales hasta concluir la revisión de seguridad y protección de datos.</footer></main></div></div><script src="/navigation.js" defer></script></body></html>';
   const cookieResult=csrfToken(req);
@@ -76,26 +78,44 @@ function mustLogin(req){if(!req.auth){redirect(req,'/acceso');return false;}retu
 function mustAdmin(req){if(!mustLogin(req))return false;if(req.auth.user.role!=='coordinator'){error(req,403,'Esta sección es exclusiva de coordinación.');return false;}return true;}
 function success(title,text){return '<div class="alert success"><strong>'+X(title)+'</strong><p>'+X(text)+'</p></div>';}
 function formAlert(text){return '<div class="alert">'+X(text)+'</div>';}
-const destinations=[
-  ['Viseu','Portugal','Escuela colaboradora: Escola Secundária de Emídio Navarro.','https://images.unsplash.com/photo-1555881400-74d7acaacd8b?auto=format&fit=crop&w=900&q=80'],
-  ['Oporto','Portugal','Ciudad del Duero y destino previsto para Administración y Gestión.','https://images.unsplash.com/photo-1555881400-74d7acaacd8b?auto=format&fit=crop&w=900&q=80'],
-  ['Róterdam','Países Bajos','Innovación y formación profesional con la red Albeda.','https://images.unsplash.com/photo-1512470876302-972faa2aa9a4?auto=format&fit=crop&w=900&q=80']
-];
-function destinationCards(){
- return '<div class="dest-grid">'+destinations.map(([name,country,description,image])=>
-   '<article class="card destination"><img src="'+image+'" alt="Fotografía ilustrativa"><div><span class="eyebrow">'+X(country)+'</span><h3>'+X(name)+'</h3><p>'+X(description)+'</p></div></article>').join('')+'</div>';
+const fallbackDestinationImages={
+  'Viseu':'/images/mmg-viseu-commons.jpg',
+  'Oporto':'/images/mmg-porto-commons.jpg',
+  'Róterdam':'https://images.unsplash.com/photo-1512470876302-972faa2aa9a4?auto=format&fit=crop&w=900&q=80'
+};
+const publicImageAssets={
+  '/images/mmg-viseu-commons.jpg':'image/jpeg',
+  '/images/mmg-porto-commons.jpg':'image/jpeg'
+};
+function imageCredit(destination){
+ if(!destination.image_credit||!destination.image_source_url||!destination.image_license_url||!destination.image_license_name)return '';
+ return '<small class="visitor-photo-credit">Foto: '+X(destination.image_credit)+' · <a href="'+X(destination.image_source_url)+'" target="_blank" rel="noopener noreferrer">Fuente</a> · <a href="'+X(destination.image_license_url)+'" target="_blank" rel="noopener noreferrer">'+X(destination.image_license_name)+'</a>'+(destination.image_note?' · '+X(destination.image_note):'')+'</small>';
+}
+function destinationCards(items=destinationsForEdition()){
+ return items.length?'<div class="dest-grid">'+items.map(destination=>{
+   const image=destination.image_url||fallbackDestinationImages[destination.name]||'';
+   return '<article class="card destination">'+(image?'<img src="'+X(image)+'" alt="'+X(destination.image_alt||'Fotografía ilustrativa de '+destination.name)+'">':'<div class="destination-image-empty" aria-hidden="true"></div>')+
+    '<div><span class="eyebrow">'+X(destination.country)+'</span><h3>'+X(destination.name)+'</h3><p>'+X(destination.description)+'</p>'+imageCredit(destination)+'</div></article>';
+  }).join('')+'</div>':'<div class="card"><p>No hay destinos activos para la edición seleccionada.</p></div>';
 }
 function visitorArrow(diagonal=false){
   return '<svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="'+(diagonal?'M5 15 15 5M6 5h9v9':'M3.5 10h12m-5-5 5 5-5 5')+'"/></svg>';
 }
 function landing(req){
-  const cards=destinations.map(([name,country,description,image],index)=>
-    '<article class="visitor-destination"><div class="visitor-destination-image"><img src="'+X(image)+'" alt="Fotografía ilustrativa del destino" loading="lazy"><span class="visitor-destination-number">'+String(index+1).padStart(2,'0')+'</span><span class="visitor-destination-country">'+X(country)+'</span></div><div class="visitor-destination-content"><h3>'+X(name)+'</h3><p>'+X(description)+'</p><a href="/registro" aria-label="Solicitar cuenta para informarse sobre '+X(name)+'">Solicitar cuenta'+visitorArrow()+'</a></div></article>'
+  const edition=activeEdition(),destinations=edition?destinationsForEdition(edition.id):[];
+  const cards=destinations.map((destination,index)=>{
+    const image=destination.image_url||fallbackDestinationImages[destination.name]||'';
+    return '<article class="visitor-destination"><div class="visitor-destination-image">'+
+    (image?'<img src="'+X(image)+'" alt="'+X(destination.image_alt||'Fotografía ilustrativa de '+destination.name)+'" loading="lazy">':'<div class="visitor-destination-image-empty" aria-hidden="true"></div>')+
+    '<span class="visitor-destination-number">'+String(index+1).padStart(2,'0')+'</span><span class="visitor-destination-country">'+X(destination.country)+'</span></div><div class="visitor-destination-content"><h3>'+X(destination.name)+'</h3><p>'+X(destination.description)+'</p>'+imageCredit(destination)+'<a href="/registro" aria-label="Solicitar cuenta para informarse sobre '+X(destination.name)+'">Solicitar cuenta'+visitorArrow()+'</a></div></article>';
+  }
   ).join('');
+  const editionLabel=edition?.label||'Sin edición activa';
+  const countries=[...new Set(destinations.map(destination=>destination.country))].join(' y ');
   const content=
     '<section class="visitor-hero" aria-labelledby="visitor-title"><div class="visitor-hero-photo" aria-hidden="true"></div><div class="visitor-hero-copy"><p class="visitor-kicker"><span></span>IES Manuel Martín González · Tenerife</p><h1 id="visitor-title">Enriqueciendo vidas.<br><em>Abriendo mentes.</em></h1><p class="visitor-hero-description">Conecta con Europa. Organiza tu candidatura y participa en experiencias Erasmus+ de formación profesional.</p><div class="visitor-actions"><a class="visitor-button visitor-primary" href="/registro">Solicitar cuenta'+visitorArrow()+'</a><a class="visitor-button visitor-secondary" href="/acceso">Iniciar sesión'+visitorArrow(true)+'</a></div></div><div class="visitor-hero-caption"><span>IES MMG</span><span>Guía de Isora, Tenerife</span></div><span class="visitor-hero-index" aria-hidden="true">EU<br>26</span></section>'+
-    '<section class="visitor-intro" aria-label="Información del curso"><p class="visitor-intro-label">Movilidades Erasmus+</p><div><h2>Una experiencia de formación profesional en Europa.</h2><p>Descubre los destinos previstos para el curso 2026–2027.</p></div><a class="visitor-text-link" href="#destinos">Ver destinos'+visitorArrow()+'</a></section>'+
-    '<section class="visitor-destinations" id="destinos" aria-labelledby="visitor-destinations-title"><div class="visitor-section-heading"><div><p class="visitor-kicker"><span></span>Curso 2026–2027</p><h2 id="visitor-destinations-title">Europa, más cerca.</h2><p>Destinos Erasmus+ · Portugal y Países Bajos</p></div><span class="visitor-count">03 <i>destinos</i></span></div><div class="visitor-destination-grid">'+cards+'</div></section>'+
+    '<section class="visitor-intro" aria-label="Información del curso"><p class="visitor-intro-label">Movilidades Erasmus+</p><div><h2>Una experiencia de formación profesional en Europa.</h2><p>Descubre los destinos previstos para el curso '+X(editionLabel)+'.</p></div><a class="visitor-text-link" href="#destinos">Ver destinos'+visitorArrow()+'</a></section>'+
+    '<section class="visitor-destinations" id="destinos" aria-labelledby="visitor-destinations-title"><div class="visitor-section-heading"><div><p class="visitor-kicker"><span></span>Curso '+X(editionLabel)+'</p><h2 id="visitor-destinations-title">Europa, más cerca.</h2><p>Destinos Erasmus+'+(countries?' · '+X(countries):'')+'</p></div><span class="visitor-count">'+String(destinations.length).padStart(2,'0')+' <i>destinos</i></span></div><div class="visitor-destination-grid">'+(cards||'<p>No hay destinos activos publicados para esta edición.</p>')+'</div></section>'+
     '<section class="visitor-route" aria-labelledby="visitor-route-title"><div class="visitor-route-marker" aria-hidden="true"><span class="visitor-marker-ring"><span></span></span><span class="visitor-marker-line"></span><span class="visitor-marker-dot"></span></div><div class="visitor-route-copy"><p class="visitor-kicker"><span></span>IES Manuel Martín González</p><h2 id="visitor-route-title">Desde Tenerife,<br>con rumbo a Europa.</h2><p>Movilidades Erasmus+ de formación profesional. Explora los destinos previstos y accede para conocer el espacio de candidatura.</p><a class="visitor-text-link" href="/acceso">Iniciar sesión'+visitorArrow()+'</a></div><div class="visitor-route-art" aria-hidden="true"><div class="visitor-route-orbit visitor-orbit-one"></div><div class="visitor-route-orbit visitor-orbit-two"></div><span class="visitor-route-island">TFE</span><span class="visitor-route-europe">EU</span><svg viewBox="0 0 360 220" fill="none"><path d="M55 154C101 95 140 76 185 106C232 138 255 115 304 55"/><circle cx="55" cy="154" r="5"/><circle cx="304" cy="55" r="5"/></svg></div></section>'+
     '<section class="visitor-closing" aria-label="Acceso a la plataforma"><div><p class="visitor-kicker"><span></span>Tu próximo paso</p><h2>¿Quieres conocer la plataforma?</h2></div><div class="visitor-closing-actions"><a class="visitor-button visitor-primary" href="/registro">Solicitar cuenta'+visitorArrow()+'</a><a href="/acceso">Ya tengo cuenta'+visitorArrow(true)+'</a></div></section>'+
     '<div class="visitor-footer"><a href="/" class="visitor-footer-brand">MMG<span>+</span><small>Movilidades Erasmus+</small></a><span>IES Manuel Martín González · Tenerife</span><a href="/privacidad">Privacidad'+visitorArrow(true)+'</a></div>';
@@ -124,7 +144,7 @@ function registration(req,msg=''){
  '<h2>2. Datos académicos</h2><div class="fields"><label>Familia profesional<select name="professional_family" required><option value="">Selecciona una opción</option>'+options+'</select></label>'+
  field('Centro educativo','center',{required:true,value:'IES Manuel Martín González'})+
  field('Estudios que cursas (alumnado)','studies')+
- field('Módulos y cursos 2026–27 (docentes)','modules')+'</div>'+
+  field('Módulos y cursos '+(activeEdition()?.label||'de la edición vigente')+' (docentes)','modules')+'</div>'+
  '<h2>3. Credenciales</h2><p class="muted">El usuario será el DNI del docente o el CIAL del alumnado. Confirmarás tu correo con un enlace enviado mediante Resend. Después, coordinación deberá aprobar la cuenta.</p><div class="fields">'+
  field('Contraseña (mínimo 12 caracteres)','password',{type:'password',required:true,extra:'minlength="12" maxlength="128" autocomplete="new-password"'})+
  field('Repetir contraseña','password_again',{type:'password',required:true,extra:'minlength="12" maxlength="128"'})+'</div>'+
@@ -137,16 +157,21 @@ function registration(req,msg=''){
 function home(req){
  const user=req.auth.user;
  if(user.role==='coordinator'){redirect(req,'/coordinacion');return;}
+  const edition=activeEdition();
  layout(req,'Mi espacio','<p class="eyebrow">TU ESPACIO ERASMUS+</p><h1>¡Bienvenido/a, '+X(user.first_name)+'!</h1><p>Tu cuenta ha sido verificada y aprobada por coordinación.</p>'+
  '<div class="hero short"><h2>Tu próxima experiencia europea empieza aquí.</h2><p>Consulta destinos, modalidades e información del programa.</p><a class="btn light" href="/destinos">Explorar destinos</a></div>'+
- '<div class="heading"><h2>Explora las movilidades</h2></div>'+destinationCards()+
+  '<div class="heading"><p class="eyebrow">CURSO '+X(edition?.label||'')+'</p><h2>Explora las movilidades</h2></div>'+destinationCards(edition?destinationsForEdition(edition.id):[])+
  '<div class="card"><h2>Próximas funcionalidades</h2><p>Candidaturas, archivos PDF, notificaciones y chat se desarrollarán después de validar esta primera fase.</p></div>');
 }
 function destinationsPage(req){
- layout(req,'Destinos Erasmus','<div class="heading"><p class="eyebrow">DESCUBRE EUROPA</p><h1>Destinos Erasmus</h1><p>Información del curso 2026–2027.</p></div>'+destinationCards()+
- '<div class="card"><h2>Fichas culturales</h2><p><a href="/destinos/viseu">Viseu</a> · <a href="/destinos/oporto">Oporto</a> · <a href="/destinos/roterdam">Róterdam</a></p></div><div class="card"><h2>Destinos por familia profesional</h2><div class="responsive"><table><tr><th>Familia profesional</th><th>Destino</th></tr>'+
- [['Transporte y mantenimiento de vehículos','Viseu'],['Administración y gestión','Oporto y Róterdam'],['Agraria','Róterdam'],['Edificación y obra civil','Viseu'],['Imagen personal','Viseu y Róterdam']].map(([family,dest])=>'<tr><td>'+X(family)+'</td><td>'+X(dest)+'</td></tr>').join('')+
- '</table></div><p class="muted">La asignación definitiva depende de la convocatoria aprobada.</p></div>');
+  const edition=activeEdition(),destinations=edition?destinationsForEdition(edition.id):[];
+  const rows=destinations.map(destination=>'<tr><td>'+X(destination.name)+'</td><td>'+X(destination.country)+'</td>'+
+    '<td>'+X(destination.modes.map(mode=>mode==='short'?'Movilidad corta':mode==='long'?'Movilidad larga':'Job Shadowing').join(' · '))+'</td>'+
+    '<td>'+X(destination.families.join(' · ')||'Todas las familias')+'</td></tr>').join('');
+  layout(req,'Destinos Erasmus','<div class="heading"><p class="eyebrow">DESCUBRE EUROPA</p><h1>Destinos Erasmus</h1><p>Información del curso '+X(edition?.label||'')+'.</p></div>'+destinationCards(destinations)+
+  '<div class="card"><h2>Destinos y modalidades de la edición</h2><div class="responsive"><table><thead><tr><th>Destino</th><th>País</th><th>Modalidades</th><th>Familias profesionales</th></tr></thead><tbody>'+
+  (rows||'<tr><td colspan="4">No hay destinos activos en esta edición.</td></tr>')+
+  '</tbody></table></div><p class="muted">La asignación definitiva depende de la convocatoria aprobada.</p></div>');
 }
 function typesPage(req){
  layout(req,'Tipos de movilidad','<div class="heading"><p class="eyebrow">OPORTUNIDADES FORMATIVAS</p><h1>Tipos de movilidad</h1><p>Modalidades previstas en el proyecto.</p></div>'+
@@ -209,7 +234,13 @@ function mailConfig(req,notice=''){
 }
 async function readForm(req){
  let buffer='';for await(const chunk of req) {buffer+=chunk.toString('utf8');if(buffer.length>25000)throw Error('Formulario demasiado grande.');}
- return Object.fromEntries(new URLSearchParams(buffer));
+  const body={};
+  for(const [key,value] of new URLSearchParams(buffer)) {
+    if(!Object.hasOwn(body,key))body[key]=value;
+    else if(Array.isArray(body[key]))body[key].push(value);
+    else body[key]=[body[key],value];
+  }
+  return body;
 }
 function requireCSRF(req,body){if(!validCsrf(req,body)){error(req,403,'Verificación de seguridad fallida. Vuelve a cargar el formulario.');return false;}return true;}
 function lookupUsername(body,role){
@@ -339,10 +370,10 @@ async function handler(req,res){
   const u=new URL(req.url,'http://localhost');
   const url=u.pathname;
   req.auth=authFromRequest(req);
-   if(req.method==='GET'&&['/styles.css','/manifest.webmanifest','/icon.svg','/pwa.js','/sw.js','/passkeys.js','/navigation.js'].includes(url)){
-    const name=url.slice(1);
-    const data=await readFile(new URL('../public/'+name,import.meta.url));
-    header(req,200,url.endsWith('.css')?'text/css; charset=utf-8':url.endsWith('.js')?'text/javascript; charset=utf-8':url.endsWith('.svg')?'image/svg+xml':'application/manifest+json; charset=utf-8',url==='/sw.js'?{'Service-Worker-Allowed':'/'}:{});
+   if(req.method==='GET'&&(['/styles.css','/manifest.webmanifest','/icon.svg','/pwa.js','/sw.js','/passkeys.js','/navigation.js'].includes(url)||publicImageAssets[url])){
+    const data=await readFile(new URL('../public/'+url.slice(1),import.meta.url));
+    const contentType=publicImageAssets[url]||(url.endsWith('.css')?'text/css; charset=utf-8':url.endsWith('.js')?'text/javascript; charset=utf-8':url.endsWith('.svg')?'image/svg+xml':'application/manifest+json; charset=utf-8');
+    header(req,200,contentType,url==='/sw.js'?{'Service-Worker-Allowed':'/'}:publicImageAssets[url]?{'Cache-Control':'public, max-age=86400'}:{});
     res.end(data);return;
   }
 

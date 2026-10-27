@@ -8,8 +8,10 @@ import {startMailWorker} from './feature-service.mjs';
 import {infoRoutes} from './feature-info.mjs';
 import {passkeyRoutes} from './feature-passkeys.mjs';
 import {privacyRoutes} from './feature-privacy.mjs';
+import {editionRoutes} from './feature-editions.mjs';
 
 export async function extraRoute(req,url,method,api) {
+  if(await editionRoutes(req,url,method,api))return true;
  if(await selectionRoutes(req,url,method,api))return true;
  if(await agendaRoutes(req,url,method,api))return true;
  if(await dashboardRoutes(req,url,method,api))return true;

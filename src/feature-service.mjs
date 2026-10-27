@@ -16,7 +16,27 @@ export const escape=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 export const clean=(v,max=200)=>String(v??'').trim().slice(0,max);
 export const validId=v=>Number.isSafeInteger(Number(v))&&Number(v)>0?Number(v):null;
 export const schoolFamilies=['Imagen personal','Transporte y mantenimiento de vehículos','Administración y gestión','Agraria','Edificación y obra civil'];
-export const destinations=['Viseu','Oporto','Róterdam'];
+export const mobilityModes=['short','long','shadowing'];
+export function activeEdition() {
+  return get('SELECT * FROM erasmus_editions WHERE is_active=1 LIMIT 1')||null;
+}
+export function destinationsForEdition(editionId=activeEdition()?.id,{includeInactive=false}={}) {
+  const id=Number(editionId);
+  if(!Number.isSafeInteger(id)||id<1)return [];
+  const rows=all(
+    'SELECT * FROM erasmus_destinations WHERE edition_id=?'+(includeInactive?'':' AND is_active=1')+' ORDER BY name COLLATE NOCASE,id',
+    id
+  );
+  return rows.map(destination=>({
+    ...destination,
+    modes:all('SELECT mobility FROM erasmus_destination_modes WHERE destination_id=? ORDER BY mobility',destination.id).map(row=>row.mobility),
+    families:all('SELECT family FROM erasmus_destination_families WHERE destination_id=? ORDER BY family',destination.id).map(row=>row.family)
+  }));
+}
+export function destinationInEdition(name,editionId=activeEdition()?.id) {
+  const normalized=String(name??'').trim().toLocaleLowerCase();
+  return normalized?destinationsForEdition(editionId).find(destination=>destination.name.toLocaleLowerCase()===normalized)||null:null;
+}
 export function select(name,items,value='') {
   return '<select name="'+name+'">'+items.map(i=>'<option value="'+escape(i)+'"'+(i===value?' selected':'')+'>'+escape(i)+'</option>').join('')+'</select>';
 }

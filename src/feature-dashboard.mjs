@@ -1,5 +1,5 @@
 import {all,get} from './db.mjs';
-import {escape as E,heading,panel} from './feature-service.mjs';
+import {escape as E,heading,panel,activeEdition} from './feature-service.mjs';
 
 const resultName={
  in_review:'En valoración',shortlisted:'Preseleccionada',
@@ -12,8 +12,9 @@ export function participantDashboard(req,api){
  const u=req.auth.user;
  if(u.role==='coordinator'){api.redirect(req,'/coordinacion');return;}
  const app=all(
- "SELECT a.id,a.mobility,a.destination,a.status,r.decision FROM applications a "+
- "LEFT JOIN application_reviews r ON r.application_id=a.id WHERE a.user_id=? ORDER BY a.id DESC",u.id);
+  "SELECT a.id,a.mobility,a.destination,a.status,e.label AS edition_label,r.decision FROM applications a "+
+  "LEFT JOIN erasmus_editions e ON e.id=a.edition_id LEFT JOIN application_reviews r ON r.application_id=a.id "+
+  "WHERE a.user_id=? ORDER BY a.id DESC",u.id);
  const groups=all("SELECT g.id,g.name,g.destination,g.type FROM mobility_groups g "+
  "JOIN group_members gm ON gm.group_id=g.id WHERE gm.user_id=? ORDER BY g.id DESC LIMIT 20",u.id);
  const notices=get("SELECT COUNT(*) AS n FROM notices WHERE audience='all' OR audience=?",u.role).n;
@@ -26,7 +27,7 @@ export function participantDashboard(req,api){
  "JOIN group_members gm ON gm.group_id=g.id WHERE gm.user_id=? AND e.start_time>=? "+
  "ORDER BY e.start_time LIMIT 5",u.id,new Date().toISOString().slice(0,16));
  const role=u.role==='student'?'alumnado':'profesorado';
- let out=heading('CURSO 2026–2027 · ERASMUS+ MMG','¡Hola, '+u.first_name+'!',
+  let out=heading('CURSO '+(activeEdition()?.label||'')+' · ERASMUS+ MMG','¡Hola, '+u.first_name+'!',
    'Tu espacio personal de '+role+' para las movilidades Erasmus+ del IES Manuel Martín González.');
  out+='<div class="stat-grid">'+
   card('Candidaturas',app.length,'En esta convocatoria')+
@@ -41,7 +42,7 @@ export function participantDashboard(req,api){
  '<a class="btn outlined" href="/candidatura">Mi candidatura</a></div></div></div>';
  out+='<div class="two">'+panel('Mis candidaturas',
   app.length?app.map(a=>'<div class="dashboard-item"><div><b>'+E(a.mobility==='long'?'Dual-Erasmus+':a.mobility==='short'?'Movilidad corta':'Job Shadowing')+
-  '</b><p>'+E(a.destination)+' · '+E(a.status==='draft'?'Borrador':resultName[a.decision]||'Presentada · pendiente')+'</p></div>'+
+   '</b><p>'+E(a.edition_label||'Edición anterior')+' · '+E(a.destination)+' · '+E(a.status==='draft'?'Borrador':resultName[a.decision]||'Presentada · pendiente')+'</p></div>'+
   (a.status==='submitted'?'<a href="/documentacion/pdf/candidatura/'+a.id+'">Ficha PDF</a>':'<a href="/candidatura">Continuar</a>')+
   '</div>').join(''):'<p>Aún no has presentado candidaturas. Puedes comenzar cuando la convocatoria esté abierta.</p>'+
   '<p><a href="/candidatura">Abrir candidaturas →</a></p>')+

@@ -1,97 +1,102 @@
 import { db,get,all,run,audit } from './db.mjs';
-import { escape as E,clean,validId,schoolFamilies,destinations,select,input,formEnd,panel,heading,datatable,paper,safeDocument,deleteDocument,storeUpload,multipart,attachment,readAttachment,isAdmin } from './feature-service.mjs';
+import { escape as E,clean,validId,schoolFamilies,mobilityModes,activeEdition,destinationsForEdition,destinationInEdition,select,input,formEnd,panel,heading,datatable,paper,safeDocument,deleteDocument,storeUpload,multipart,attachment,readAttachment,isAdmin } from './feature-service.mjs';
 
 db.exec("CREATE TABLE IF NOT EXISTS document_deletion_log ("+
  "id INTEGER PRIMARY KEY,document_kind TEXT NOT NULL,document_id INTEGER NOT NULL,"+
  "reason TEXT NOT NULL,actor_id INTEGER NOT NULL REFERENCES users(id),"+
  "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);");
 
-const familyDest={
- 'Imagen personal':['Viseu','Róterdam'],
- 'Transporte y mantenimiento de vehículos':['Viseu'],
- 'Administración y gestión':['Oporto','Róterdam'],
- 'Agraria':['Róterdam'],
- 'Edificación y obra civil':['Viseu']
-};
 const modeName={short:'Movilidad corta',long:'Movilidad larga Dual-Erasmus+',shadowing:'Job Shadowing'};
-function formBody(csrf,u,old={},notice='') {
- const modes=u.role==='teacher'?['short','shadowing']:['short','long'];
- return heading('CANDIDATURA · CURSO 2026–2027','Presentar candidatura','Completa las preguntas y entrega tu solicitud. Las fichas presentadas se guardan como PDF inmutable.')+
+function formBody(csrf,u,edition,destinations,old={},notice='') {
+ const availableModes=[...new Set(destinations.flatMap(destination=>destination.modes))];
+ const modes=(u.role==='teacher'?['short','shadowing']:['short','long']).filter(mode=>availableModes.includes(mode));
+ return heading('CANDIDATURA · '+(edition?.label||'EDICIÓN NO DISPONIBLE'),'Presentar candidatura','Completa las preguntas y entrega tu solicitud. Las fichas presentadas se guardan como PDF inmutable.')+
  (notice?panel('Aviso','<p>'+E(notice)+'</p>'):'')+
+  (!edition?panel('Sin edición vigente','<p>Coordinación todavía no ha seleccionado una edición para recibir candidaturas.</p>'):'')+
+  (!destinations.length?panel('Sin destinos disponibles','<p>La edición vigente todavía no tiene destinos publicados.</p>'):'')+
+  (edition&&destinations.length?
  '<form method="post" action="/candidatura" class="card form">'+
  '<h2>Datos de la candidatura</h2>'+
  '<label>Tipo de movilidad'+select('mobility',modes.map(m=>m+'|'+modeName[m]),'')+'</label>'+
  '<label>Familia profesional'+select('family',schoolFamilies,old.family||u.professional_family||'')+'</label>'+
- '<label>Destino deseado'+select('destination',destinations,old.destination||'Róterdam')+'</label>'+
+  '<label>Destino deseado'+select('destination',destinations.map(destination=>destination.name),old.destination||destinations[0].name)+'</label>'+
  (u.role==='student'?'<label>¿Tienes beca MEC?'+select('mec',['Sí','No'],old.mec||'No')+'</label>':'')+
  '<label>Motivación personal<textarea name="motivation" rows="8" maxlength="5000" required>'+E(old.motivation||'')+'</textarea></label>'+
- '<div class="notice-box">La movilidad corta prevista se desarrollará en Países Bajos. Para la movilidad larga se comprobará la correspondencia entre familia profesional y destino.</div>'+
- '<input type="hidden" name="csrf" value="'+E(csrf)+'"><button class="btn" name="intent" value="submit">Presentar candidatura</button>'+
- '<button class="btn secondary" name="intent" value="draft">Guardar borrador</button></form>';
+  '<div class="notice-box">Las modalidades, familias profesionales y destinos disponibles corresponden a la edición '+E(edition.label)+'.</div>'+
+  '<input type="hidden" name="edition_id" value="'+edition.id+'"><input type="hidden" name="csrf" value="'+E(csrf)+'"><button class="btn" name="intent" value="submit">Presentar candidatura</button>'+
+  '<button class="btn secondary" name="intent" value="draft">Guardar borrador</button></form>':'');
 }
 function normalizeMobility(raw){
  const m=String(raw||'').split('|')[0];
  return ['short','long','shadowing'].includes(m)?m:null;
 }
-function allowed(u,mobility,family,destination){
+function allowed(u,mobility,family,destination,editionId){
  if(u.role==='coordinator')return false;
  if((mobility==='long'&&u.role!=='student')||(mobility==='shadowing'&&u.role!=='teacher'))return false;
- if(!schoolFamilies.includes(family)||!destinations.includes(destination))return false;
- if(mobility==='short')return destination==='Róterdam';
- if(mobility==='long')return (familyDest[family]||[]).includes(destination);
+ if(!mobilityModes.includes(mobility)||!schoolFamilies.includes(family))return false;
+ const selected=destinationInEdition(destination,editionId);
+ if(!selected||!selected.modes.includes(mobility))return false;
+ if(mobility==='long'&&!selected.families.includes(family))return false;
  return true;
 }
 function listApps(u,csrf){
- const rows=all("SELECT a.*,r.decision AS review_decision FROM applications a LEFT JOIN application_reviews r ON r.application_id=a.id WHERE a.user_id=? ORDER BY a.created_at DESC",u.id);
+ const rows=all("SELECT a.*,e.label AS edition_label,r.decision AS review_decision FROM applications a "+
+ "LEFT JOIN erasmus_editions e ON e.id=a.edition_id LEFT JOIN application_reviews r ON r.application_id=a.id "+
+ "WHERE a.user_id=? ORDER BY a.created_at DESC",u.id);
  return panel('Mis candidaturas',
- rows.length?datatable(['Modalidad','Destino','Estado','Documento'],rows.map(a=>
- '<tr><td>'+E(modeName[a.mobility])+'</td><td>'+E(a.destination)+'</td><td>'+E(a.status==='draft'?'Borrador':({in_review:'En valoración',shortlisted:'Preseleccionada',selected:'Seleccionada',reserve:'En lista de reserva',not_selected:'No seleccionada'})[a.review_decision]||'Presentada · pendiente')+'</td><td>'+
+ rows.length?datatable(['Edición','Modalidad','Destino','Estado','Documento'],rows.map(a=>
+ '<tr><td>'+E(a.edition_label||'Edición anterior')+'</td><td>'+E(modeName[a.mobility])+'</td><td>'+E(a.destination)+'</td><td>'+E(a.status==='draft'?'Borrador':({in_review:'En valoración',shortlisted:'Preseleccionada',selected:'Seleccionada',reserve:'En lista de reserva',not_selected:'No seleccionada'})[a.review_decision]||'Presentada · pendiente')+'</td><td>'+
  (a.status==='submitted'?'<a href="/documentacion/pdf/candidatura/'+a.id+'">Descargar PDF</a>':'Puedes presentar el borrador con el formulario')+
  '</td></tr>')):'<p>No tienes candidaturas guardadas.</p>');
 }
-function candidatePage(req,api,notice=''){
+function candidatePage(req,api,notice='',old={}){
  const user=req.auth.user;
  if(isAdmin(user)){api.redirect(req,'/coordinacion/candidaturas');return;}
- api.layout(req,'Candidatura Erasmus',formBody(api.csrf(req),user,{},notice)+listApps(user,api.csrf(req)));
+ const edition=activeEdition(),destinations=edition?destinationsForEdition(edition.id):[];
+ api.layout(req,'Candidatura Erasmus',formBody(api.csrf(req),user,edition,destinations,old,notice)+listApps(user,api.csrf(req)));
 }
-function pdfRows(application,u){
+function pdfRows(application,u,editionLabel){
  return [
  ['Participante',u.first_name+' '+u.last_name],['Usuario',u.username],['Perfil',u.role==='student'?'Alumnado':'Docente'],
  ['Tipo de movilidad',modeName[application.mobility]],
  ['Familia profesional',application.family],['Destino solicitado',application.destination],
  ['Postulación personal',application.motivation],['Beca MEC',application.mec],
- ['Fecha de entrega',new Date().toISOString()],['Curso','2026-2027']];
+  ['Fecha de entrega',new Date().toISOString()],['Curso',editionLabel||'Edición anterior']];
 }
 function submitCandidate(req,body,api){
  const u=req.auth.user;
  if(isAdmin(u)){api.error(req,403,'Coordinación no presenta candidaturas.');return;}
+ const edition=activeEdition(),editionId=validId(body.edition_id);
  const mobility=normalizeMobility(body.mobility),family=clean(body.family),destination=clean(body.destination);
  const motivation=clean(body.motivation,5000),mec=u.role==='student'?clean(body.mec):'No procede';
  const intent=String(body.intent||'');
- if(!mobility||!allowed(u,mobility,family,destination)||motivation.length<30||
+ if(!edition||editionId!==edition.id||!mobility||!allowed(u,mobility,family,destination,edition.id)||motivation.length<30||
    (u.role==='student'&&!['Sí','No'].includes(mec))||!['submit','draft'].includes(intent)) {
-    candidatePage(req,api,'Comprueba modalidad, familia profesional, destino y motivación (mínimo 30 caracteres).');return;
+     candidatePage(req,api,'La edición pudo cambiar. Comprueba modalidad, familia, destino y motivación (mínimo 30 caracteres) y vuelve a intentarlo.',body);return;
  }
- const existing=get('SELECT * FROM applications WHERE user_id=? AND mobility=?',u.id,mobility);
- if(existing?.status==='submitted'){candidatePage(req,api,'Esta modalidad ya tiene una solicitud presentada. Contacta con coordinación si necesitas subsanar un error.');return;}
- const application={mobility,family,destination,motivation,mec};
+ const existing=get('SELECT * FROM applications WHERE user_id=? AND mobility=? AND edition_id=?',u.id,mobility,edition.id);
+ if(existing?.status==='submitted'){candidatePage(req,api,'Esta modalidad ya tiene una solicitud presentada para '+edition.label+'. Contacta con coordinación si necesitas subsanar un error.');return;}
+ const application={mobility,family,destination,motivation,mec,edition_id:edition.id};
  let id;
  if(existing){
    id=existing.id;
    run('UPDATE applications SET family=?,destination=?,motivation=?,mec=? WHERE id=?',family,destination,motivation,mec,id);
  }else{
-   id=Number(run('INSERT INTO applications(user_id,mobility,family,destination,motivation,mec) VALUES (?,?,?,?,?,?)',
-       u.id,mobility,family,destination,motivation,mec).lastInsertRowid);
+    id=Number(run('INSERT INTO applications(user_id,edition_id,mobility,family,destination,motivation,mec) VALUES (?,?,?,?,?,?,?)',
+        u.id,edition.id,mobility,family,destination,motivation,mec).lastInsertRowid);
  }
  if(intent==='submit'){
-   const pdf=paper('Ficha de candidatura Erasmus+ MMG',pdfRows(application,u),'El documento refleja las respuestas registradas en el momento de la entrega.');
+    const pdf=paper('Ficha de candidatura Erasmus+ MMG',pdfRows(application,u,edition.label),'El documento refleja las respuestas registradas en el momento de la entrega.');
    run("UPDATE applications SET status='submitted',submitted_at=CURRENT_TIMESTAMP,pdf_file=?,pdf_sha256=? WHERE id=? AND status='draft'",
        pdf.name,pdf.hash,id);
    audit(u.id,'candidature_submitted',id);
  }else audit(u.id,'candidature_draft_saved',id);
- candidatePage(req,api,intent==='submit'?'Candidatura presentada. Descarga el PDF desde el listado.':'Borrador guardado correctamente.');
+  candidatePage(req,api,intent==='submit'?'Candidatura presentada para '+edition.label+'. Descarga el PDF desde el listado.':'Borrador guardado correctamente para '+edition.label+'.');
 }
-const termsVersion='MMG-ERASMUS-2026-27-BORRADOR-1';
+function termsVersion(){
+ const label=activeEdition()?.label||'sin-edicion';
+ return 'MMG-ERASMUS-'+label.replace(/[^a-z0-9]/gi,'')+'-BORRADOR-1';
+}
 const terms=[
  'Participaré en las actividades programadas de acuerdo con las instrucciones del centro y la institución de acogida.',
  'Respetaré las normas de convivencia, seguridad, asistencia, puntualidad y uso responsable del alojamiento y del transporte.',
@@ -101,9 +106,9 @@ const terms=[
  'Conozco que el centro revisará la documentación y que el presente acuse digital no sustituye una firma electrónica cualificada.'
 ];
 function commitments(req,api,notice=''){
- const u=req.auth.user;
- const existing=get('SELECT id,accepted_at FROM participant_commitments WHERE user_id=? AND version=?',u.id,termsVersion);
- let body=heading('COMPROMISO DE PARTICIPACIÓN','Responsabilidades en la movilidad','Lee detenidamente el borrador informativo y registra tu aceptación para revisión.');
+ const u=req.auth.user,version=termsVersion(),edition=activeEdition();
+ const existing=get('SELECT id,accepted_at FROM participant_commitments WHERE user_id=? AND version=?',u.id,version);
+ let body=heading('COMPROMISO DE PARTICIPACIÓN · '+(edition?.label||''),'Responsabilidades en la movilidad','Lee detenidamente el borrador informativo y registra tu aceptación para revisión.');
  body+=panel('Términos de participación (borrador)', '<ol>'+terms.map(t=>'<li>'+E(t)+'</li>').join('')+'</ol>'+
  '<div class="notice-box">Este texto debe ser aprobado por el centro y por sus responsables jurídicos antes del uso con alumnado. No sustituye consentimientos parentales, autorizaciones de viaje ni firmas requeridas por ley.</div>');
  if(notice)body+=panel('Resultado','<p>'+E(notice)+'</p>');
@@ -114,20 +119,20 @@ function commitments(req,api,notice=''){
  api.layout(req,'Compromisos Erasmus',body);
 }
 function postCommit(req,body,api){
- const u=req.auth.user;
+ const u=req.auth.user,version=termsVersion(),edition=activeEdition();
  if(body.accept!=='yes'||clean(body.full_name,180)!==u.first_name+' '+u.last_name){
    commitments(req,api,'Para registrar la aceptación introduce exactamente el nombre completo de tu cuenta.');return;
  }
- const existing=get('SELECT id FROM participant_commitments WHERE user_id=? AND version=?',u.id,termsVersion);
+  const existing=get('SELECT id FROM participant_commitments WHERE user_id=? AND version=?',u.id,version);
  if(existing){commitments(req,api,'Ya existe una aceptación registrada.');return;}
  const p=paper('Acuse de lectura de compromisos (borrador)',[
-  ['Participante',u.first_name+' '+u.last_name],['Usuario',u.username],['Versión',termsVersion],
+   ['Participante',u.first_name+' '+u.last_name],['Usuario',u.username],['Edición',edition?.label||'Sin edición activa'],['Versión',version],
   ...terms.map((term,i)=>['Compromiso '+(i+1),term]),
   ['Manifestación','Declaro haber leído el borrador.'],
   ['Fecha y hora (UTC)',new Date().toISOString()]
  ],'Acuse electrónico simple, no equivalente a firma electrónica cualificada.');
  const id=Number(run('INSERT INTO participant_commitments(user_id,version,full_name,document_path,sha256) VALUES (?,?,?,?,?)',
- u.id,termsVersion,clean(body.full_name),p.name,p.hash).lastInsertRowid);
+  u.id,version,clean(body.full_name),p.name,p.hash).lastInsertRowid);
  audit(u.id,'commitment_accepted',id);
  commitments(req,api,'Acuse registrado y PDF generado.');
 }
@@ -217,11 +222,12 @@ export async function candidateRoutes(req,url,method,api){
  }
  if(url==='/coordinacion/candidaturas'&&method==='GET'){
   if(!api.mustAdmin(req))return true;
-  const apps=all("SELECT a.id,a.mobility,a.destination,a.status,a.submitted_at,u.first_name,u.last_name FROM applications a JOIN users u ON u.id=a.user_id ORDER BY a.id DESC");
-  api.layout(req,'Candidaturas recibidas',heading('COORDINACIÓN','Candidaturas recibidas','Revisión de todas las solicitudes docentes y de alumnado.')+
-    panel('Solicitudes',datatable(['Participante','Tipo','Destino','Estado','Ficha PDF'],apps.map(a=>
-      '<tr><td>'+E(a.first_name+' '+a.last_name)+'</td><td>'+E(modeName[a.mobility])+'</td><td>'+E(a.destination)+'</td>'+
-      '<td>'+E(a.status)+'</td><td>'+(a.status==='submitted'?'<a href="/documentacion/pdf/candidatura/'+a.id+'">Descargar</a>':'Borrador')+'</td></tr>'))));
+   const apps=all("SELECT a.id,a.mobility,a.destination,a.status,a.submitted_at,e.label AS edition_label,u.first_name,u.last_name "+
+     "FROM applications a JOIN users u ON u.id=a.user_id LEFT JOIN erasmus_editions e ON e.id=a.edition_id ORDER BY a.id DESC");
+   api.layout(req,'Candidaturas recibidas',heading('COORDINACIÓN · '+(activeEdition()?.label||''),'Candidaturas recibidas','Revisión de todas las solicitudes docentes y de alumnado.')+
+     panel('Solicitudes',datatable(['Participante','Edición','Tipo','Destino','Estado','Ficha PDF'],apps.map(a=>
+       '<tr><td>'+E(a.first_name+' '+a.last_name)+'</td><td>'+E(a.edition_label||'Edición anterior')+'</td><td>'+E(modeName[a.mobility])+'</td><td>'+E(a.destination)+'</td>'+
+       '<td>'+E(a.status)+'</td><td>'+(a.status==='submitted'?'<a href="/documentacion/pdf/candidatura/'+a.id+'">Descargar</a>':'Borrador')+'</td></tr>'))));
   return true;
  }
  if(url==='/coordinacion/documentos'&&method==='GET'){adminDocs(req,api);return true;}
