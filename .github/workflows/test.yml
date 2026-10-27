@@ -42,8 +42,20 @@ jobs:
           stage=$(mktemp -d /tmp/mmg-release-test.XXXXXXXX)
           trap 'rm -rf -- "$stage"' EXIT
           cp -a package.json package-lock.json src scripts public tests node_modules "$stage/"
+          # Reproduce the permissions created by the deployer's umask 077.
+          # Simply opening the staging directory is not enough when files
+          # inside it were written with mode 0600 and subdirectories 0700.
+          chmod -R go-rwx "$stage"
+          # Regression guard: 'nobody' must NOT see the package before the fix.
+          if runuser -u nobody -- test -r "$stage/package.json"; then
+            echo "Expected restrictive permissions before normalization" >&2
+            exit 1
+          fi
           chmod -R a+rX "$stage"
           chmod -R go-w "$stage"
+          # Verify reading both the package and a nested source file.
+          runuser -u nobody -- test -r "$stage/package.json"
+          runuser -u nobody -- test -r "$stage/src/server.mjs"
           cd "$stage"
           runuser -u nobody -- env HOME=/tmp npm_config_cache=/tmp/mmg-npm-test-cache npm test
           SCRIPT
