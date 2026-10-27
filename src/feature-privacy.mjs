@@ -4,7 +4,7 @@ import { cookie, cookies, canTry, countTry } from './auth.mjs';
 import { sendMail, publicUrl } from './mailer.mjs';
 import { makePdf } from './pdf.mjs';
 import {
-  escape as E, clean, validId, panel, heading, formEnd, storeUpload, multipart
+  escape as E, clean, validId, panel, heading, formEnd, storeUpload, multipart, queueMail
 } from './feature-service.mjs';
 
 db.exec(
@@ -230,7 +230,6 @@ function reviewPost(req,api,b){
  audit(req.auth.user.id,'guardian_authorization_'+status,id);
  try{
   // No secret URLs stored in the outbox; status notifications contain no sensitive details.
-  const {queueMail}=await import('./feature-service.mjs');
   queueMail(entry.institutional_email,'Autorización del representante legal · Erasmus+ MMG',
     'La coordinación ha '+(status==='approved'?'validado':'rechazado')+
     ' la autorización presentada para el registro Erasmus+ de '+entry.first_name+
