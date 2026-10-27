@@ -1,0 +1,1 @@
+- [Replit secret lifecycle](replit-secret-lifecycle.md) — secret confirmation does not prove submitted values are correct; removal must be verified separately.
