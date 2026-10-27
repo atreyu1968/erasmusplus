@@ -43,7 +43,7 @@ export function participantDashboard(req,api){
   app.length?app.map(a=>'<div class="dashboard-item"><div><b>'+E(a.mobility==='long'?'Dual-Erasmus+':a.mobility==='short'?'Movilidad corta':'Job Shadowing')+
   '</b><p>'+E(a.destination)+' · '+E(a.status==='draft'?'Borrador':resultName[a.decision]||'Presentada · pendiente')+'</p></div>'+
   (a.status==='submitted'?'<a href="/documentacion/pdf/candidatura/'+a.id+'">Ficha PDF</a>':'<a href="/candidatura">Continuar</a>')+
-  '</div>').join(''):'<p>Aún no has presentado candidaturas. Puedes comenzar cuando la convocatoria esté abierta.</p>')+
+  '</div>').join(''):'<p>Aún no has presentado candidaturas. Puedes comenzar cuando la convocatoria esté abierta.</p>'+
   '<p><a href="/candidatura">Abrir candidaturas →</a></p>')+
  panel('Mis grupos y movilidades',
   groups.length?groups.map(g=>'<div class="dashboard-item"><div><b>'+E(g.name)+'</b><p>'+E(g.destination)+'</p></div>'+
@@ -52,11 +52,11 @@ export function participantDashboard(req,api){
  out+='<div class="two">'+panel('Próximas actividades',
   events.length?events.map(e=>'<div class="dashboard-item"><div><b>'+E(e.title)+'</b>'+
   '<p>'+E(e.name)+' · '+E(e.start_time.replace('T',' '))+(e.location?' · '+E(e.location):'')+'</p></div></div>').join(''):
-  '<p>No hay actividades futuras asignadas todavía.</p>')+
+  '<p>No hay actividades futuras asignadas todavía.</p>'+
   '<p><a href="/agenda">Consultar planificación →</a></p>')+
  panel('Últimos avisos',recent.length?recent.map(n=>
   '<div class="dashboard-item"><div><b>'+E(n.title)+'</b><p>'+E(n.created_at)+'</p></div></div>').join(''):
-  '<p>Por ahora no hay nuevas notificaciones.</p>')+
+  '<p>Por ahora no hay nuevas notificaciones.</p>'+
   '<p><a href="/notificaciones">Abrir tablón →</a></p>')+'</div>';
  api.layout(req,'Mi espacio Erasmus+',out);
 }
