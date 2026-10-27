@@ -64,6 +64,14 @@ test('Valoración manual y agenda: seguridad por perfil, grupo y CSRF',async()=>
     cookie,'content-type':'application/x-www-form-urlencoded'},
     body:new URLSearchParams({...fields,csrf})});
   }
+  function queuedMail(){
+   const result=spawnSync(process.execPath,['--input-type=module','-e',[
+    "import {all} from './src/db.mjs';",
+    "console.log(JSON.stringify(all('SELECT to_email,subject,body FROM outbox')));"
+   ].join('\n')],{env,encoding:'utf8',timeout:20000});
+   assert.equal(result.status,0,result.stderr);
+   return JSON.parse(result.stdout);
+  }
   const admin=await login('ADMIN');
   const [overview,oh]=await page('/coordinacion/candidaturas',admin);
   assert.equal(overview.status,200);assert.match(oh,/Valoración de candidaturas/);
@@ -120,19 +128,25 @@ test('Valoración manual y agenda: seguridad por perfil, grupo y CSRF',async()=>
   assert.equal(teacherUpdated.status,200);
   assert.match(teacherUpdatedHtml,/Revisar documentación/);
   assert.match(teacherUpdatedHtml,/Reunión informativa/);
-   const assignedTeacherCsrf=teacherUpdatedHtml.match(/name="csrf" value="([a-f0-9]+)"/)?.[1];
-   assert.ok(assignedTeacherCsrf);
-   const teacherCompletion=await post('/agenda/tarea/1/completar',assignedTeacher,assignedTeacherCsrf);
-   assert.equal(teacherCompletion.status,303);
-   const [teacherAfterCompletion,teacherAfterCompletionHtml]=await page('/agenda/grupo/1',assignedTeacher);
-   assert.equal(teacherAfterCompletion.status,200);
-   assert.match(teacherAfterCompletionHtml,/Completada/);
-   const assignedCompletionCheck=spawnSync(process.execPath,['--input-type=module','-e',[
-    "import {get} from './src/db.mjs';",
-    "console.log(get(\"SELECT COUNT(*) AS n FROM mobility_task_completions c JOIN users u ON u.id=c.user_id WHERE c.task_id=1 AND u.username='DOCASIGNADO'\").n);"
-   ].join('\n')],{env,encoding:'utf8',timeout:20000});
-   assert.equal(assignedCompletionCheck.status,0,assignedCompletionCheck.stderr);
-   assert.equal(assignedCompletionCheck.stdout.trim(),'1');
+  const assignedTeacherCsrf=teacherUpdatedHtml.match(/name="csrf" value="([a-f0-9]+)"/)?.[1];
+  assert.ok(assignedTeacherCsrf);
+  const teacherCompletion=await post('/agenda/tarea/1/completar',assignedTeacher,assignedTeacherCsrf);
+  assert.equal(teacherCompletion.status,303);
+  const [teacherAfterCompletion,teacherAfterCompletionHtml]=await page('/agenda/grupo/1',assignedTeacher);
+  assert.equal(teacherAfterCompletion.status,200);
+  assert.match(teacherAfterCompletionHtml,/Completada/);
+  const assignedCompletionCheck=spawnSync(process.execPath,['--input-type=module','-e',[
+   "import {get} from './src/db.mjs';",
+   "console.log(get(\"SELECT COUNT(*) AS n FROM mobility_task_completions c JOIN users u ON u.id=c.user_id WHERE c.task_id=1 AND u.username='DOCASIGNADO'\").n);"
+  ].join('\n')],{env,encoding:'utf8',timeout:20000});
+  assert.equal(assignedCompletionCheck.status,0,assignedCompletionCheck.stderr);
+  assert.equal(assignedCompletionCheck.stdout.trim(),'1');
+  const initialMail=queuedMail();
+  const expectedRecipients=['docente.asignada@canariaseducacion.es','uno@canariaseducacion.es'];
+  assert.deepEqual(initialMail.filter(m=>m.body.includes('Reunión informativa'))
+   .map(m=>m.to_email).sort(),expectedRecipients);
+  assert.deepEqual(initialMail.filter(m=>m.body.includes('Revisar documentación'))
+   .map(m=>m.to_email).sort(),expectedRecipients);
   const unassigned=spawnSync(process.execPath,['--input-type=module','-e',[
    "import {get,run} from './src/db.mjs';",
    "const teacher=get(\"SELECT id FROM users WHERE username='DOCASIGNADO'\");",
@@ -140,6 +154,19 @@ test('Valoración manual y agenda: seguridad por perfil, grupo y CSRF',async()=>
    "if(result.changes!==1)process.exit(1);"
   ].join('\n')],{env,encoding:'utf8',timeout:20000});
   assert.equal(unassigned.status,0,unassigned.stderr);
+  const laterEvent=await post('/coordinacion/agenda/actividad',admin,csrf,{
+   group_id:'1',title:'Actividad tras retirada',kind:'activity',start_time:'2027-03-15T10:00'
+  });
+  assert.equal(laterEvent.status,200);assert.match(await laterEvent.text(),/Actividad publicada/);
+  const laterTask=await post('/coordinacion/agenda/tarea',admin,csrf,{
+   group_id:'1',title:'Tarea tras retirada',due_date:'2027-03-12'
+  });
+  assert.equal(laterTask.status,200);assert.match(await laterTask.text(),/Tarea asignada/);
+  const mailAfterRemoval=queuedMail();
+  assert.deepEqual(mailAfterRemoval.filter(m=>m.body.includes('Actividad tras retirada'))
+   .map(m=>m.to_email),['uno@canariaseducacion.es']);
+  assert.deepEqual(mailAfterRemoval.filter(m=>m.body.includes('Tarea tras retirada'))
+   .map(m=>m.to_email),['uno@canariaseducacion.es']);
   const [revokedAgenda]=await page('/agenda/grupo/1',assignedTeacher);
   assert.equal(revokedAgenda.status,404);
   const [revokedChat]=await page('/chat?grupo=1',assignedTeacher);
