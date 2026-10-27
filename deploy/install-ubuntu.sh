@@ -12,7 +12,13 @@ source /etc/os-release
 [[ "$ID" == ubuntu ]] || die 'El instalador admite únicamente Ubuntu.'
 case "$VERSION_ID" in
   22.04|24.04|26.04) ;;
-  *) die "Ubuntu $VERSION_ID no está admitido. Actualiza el sistema operativo con el equipo TIC antes de desplegar datos reales." ;;
+  25.04)
+    die 'Ubuntu 25.04 dejó de recibir actualizaciones de seguridad el 15/01/2026. No se instalará Erasmus+ MMG con datos de alumnado sobre un sistema EOL. Se recomienda migrar a Ubuntu 26.04 LTS y conservar el túnel Cloudflare. Instrucciones: https://github.com/atreyu1968/erasmusplus/blob/main/docs/MIGRACION_UBUNTU_25_04.md'
+    ;;
+  25.10)
+    die 'Ubuntu 25.10 dejó de recibir actualizaciones de seguridad el 09/07/2026. Actualiza a Ubuntu 26.04 LTS antes de instalar Erasmus+ MMG. Guía: https://github.com/atreyu1968/erasmusplus/blob/main/docs/MIGRACION_UBUNTU_25_04.md'
+    ;;
+  *) die "Ubuntu $VERSION_ID no está admitido. Consulta los requisitos de Ubuntu LTS del README." ;;
 esac
 ARCH=$(dpkg --print-architecture)
 [[ "$ARCH" == amd64 || "$ARCH" == arm64 ]] || die "Arquitectura no admitida: $ARCH"
