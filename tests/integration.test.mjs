@@ -80,7 +80,7 @@ test('MVP: creación del coordinador y controles básicos',async ()=>{
   assert.equal(r.status,200,'la portada pública responde correctamente');
   assert.match(r.headers.get('content-type')||'',/text\/html/);
   let homepage=await r.text();
-  assert.equal((homepage.match(/<article class="visitor-destination">/g)||[]).length,3,
+  assert.equal((homepage.match(/<article class="vl-destination">/g)||[]).length,3,
    'la portada publica los tres destinos previstos');
   for(const destination of ['Viseu','Oporto','Róterdam']){
    assert.ok(homepage.includes('<h3>'+destination+'</h3>'),`la portada publica ${destination}`);

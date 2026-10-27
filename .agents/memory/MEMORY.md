@@ -1,2 +1,3 @@
 - [Replit secret lifecycle](replit-secret-lifecycle.md) — secret confirmation does not prove submitted values are correct; removal must be verified separately.
 - [MMG visual identity](mmg-visual-identity.md) — restyle the interface without replacing the application's original colors.
+- [SQLite mutation checks](sqlite-mutation-checks.md) — verify persisted state after updates; a successful response can hide a bind-count mistake.

@@ -234,7 +234,7 @@ Esta guía describe las funciones disponibles en la versión actual. La aplicaci
 
 ### Acceso y alta de cuentas
 
-- **Visitas sin cuenta:** la portada `/` muestra información del proyecto y los destinos publicados para la edición vigente. Usa **Solicitar cuenta** para abrir `/registro` o **Iniciar sesión** para ir a `/acceso`.
+- **Visitas sin cuenta:** la portada `/` presenta las movilidades Erasmus+ y los destinos publicados para la edición vigente. Usa **Conoce la convocatoria** para abrir `/registro` o **Acceso a participantes** para ir a `/acceso`.
 - **Registro:** solo se aceptan altas cuando hay una convocatoria vigente, el registro está abierto y coordinación ha configurado Resend y aprobado el aviso de privacidad. El correo debe ser institucional `@canariaseducacion.es`. El usuario de docentes es su DNI; el del alumnado, su CIAL. El registro vincula la cuenta a la convocatoria vigente en ese momento.
 - **Verificación y aprobación:** la persona usuaria confirma el correo recibido. La cuenta no puede iniciar sesión hasta que coordinación también la apruebe. Si no llega el correo, utiliza **Reenviar verificación**; consulta con coordinación si el registro aparece deshabilitado.
 - **Protección de datos de menores:** las personas adultas registran electrónicamente que han recibido y leído el aviso. Para menores de 18 años, la persona representante legal debe completar y subir el modelo PDF recibido por correo. Coordinación revisa la documentación antes de aprobar la cuenta.
@@ -290,6 +290,13 @@ El menú de coordinación solo aparece para cuentas con ese perfil. La página *
 - **Notificaciones:** publica avisos para todo el mundo, solo alumnado o solo docentes; puedes adjuntar un documento o imagen. Si Resend está configurado, se pone un correo institucional en cola para cada destinatario aprobado.
 - **Chat y supervisión:** el chat muestra las conversaciones permitidas y ofrece herramientas de supervisión. Informa a las personas usuarias del protocolo del centro y consulta las conversaciones únicamente con la autorización correspondiente.
 - **Configurar Resend:** guarda la configuración cifrada, valida el dominio remitente en Resend y utiliza el botón de prueba antes de abrir el registro o enviar comunicaciones reales.
+
+#### Portada pública y galerías
+
+- **Portada y galerías:** desde el menú de coordinación, abre **Portada y galerías**. Puedes editar los textos visibles, imagen principal, datos de contacto y enlaces HTTPS a redes sociales. Los destinos y la convocatoria vigente se leen directamente de **Ediciones y destinos**, no se duplican en la landing.
+- **Galerías:** crea un álbum, opcionalmente vincúlalo a una convocatoria y añade imágenes JPG, PNG o WebP de hasta 6 MB. Los álbumes y las fotos empiezan como borradores; coordina su publicación por separado. La portada muestra hasta 12 imágenes publicadas.
+- **Autorización de imágenes:** al publicar la imagen principal o una foto de galería se exige confirmar que existe autorización institucional. El sistema registra quién confirmó la publicación y cuándo. Esta casilla no sustituye la comprobación real de las autorizaciones ni la revisión del centro, especialmente para imágenes de menores.
+- **Almacenamiento:** las imágenes se guardan en `data/documents` junto a los adjuntos ya protegidos; las copias cifradas del directorio `/var/lib/erasmusplus` incluyen la base SQLite y esos archivos.
 
 Para proteger los datos y evitar candidaturas sin destino, sigue este orden: **crear edición → preparar destinos → activar convocatoria → asignar cuentas → crear grupos → publicar agenda y tareas → revisar candidaturas**.
 

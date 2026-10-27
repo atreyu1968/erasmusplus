@@ -9,8 +9,10 @@ import {infoRoutes} from './feature-info.mjs';
 import {passkeyRoutes} from './feature-passkeys.mjs';
 import {privacyRoutes} from './feature-privacy.mjs';
 import {editionRoutes} from './feature-editions.mjs';
+import {landingRoutes} from './feature-landing.mjs';
 
 export async function extraRoute(req,url,method,api) {
+ if(await landingRoutes(req,url,method,api))return true;
   if(await editionRoutes(req,url,method,api))return true;
  if(await selectionRoutes(req,url,method,api))return true;
  if(await agendaRoutes(req,url,method,api))return true;

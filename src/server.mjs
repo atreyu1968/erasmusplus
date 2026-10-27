@@ -10,6 +10,8 @@ import crypto from 'node:crypto';
 import {extraRoute,startMailWorker} from './features.mjs';
 import {privacyReady,ageOnRegistration,acknowledgeAdult,clearance,emailGuardianLink} from './feature-privacy.mjs';
 import {activeEdition,editionForUser,destinationsForEdition} from './feature-service.mjs';
+import {getLandingSettings,publicLandingGallery} from './feature-landing.mjs';
+import {renderVisitorLanding} from './feature-landing-view.mjs';
 
 const host=process.env.HOST || '127.0.0.1', port=Number(process.env.PORT || 3000);
 const isRegistrationOpen=() => process.env.MMG_ENABLE_REGISTRATION==='1' && privacyReady();
@@ -59,7 +61,7 @@ function layout(req,title,main,{publicPage=false,status=200,mainClass='',hideSid
   const user=req.auth?.user;
   const current=req.url.split('?')[0];
   const links=hideSidebar?[]:publicPage?[['/','⌂','Inicio'],['/acceso','⇥','Acceso'],['/registro','♙','Registro'],['/privacidad','§','Privacidad']]:
-    [...nav,...(user?.role==='coordinator'?[['/coordinacion','▦','Control de cuentas'],['/coordinacion/ediciones','▦','Ediciones y destinos'],['/coordinacion/candidaturas','▤','Candidaturas recibidas'],['/coordinacion/documentos','▣','Archivo documental'],['/coordinacion/grupos','♙','Grupos de movilidad'],['/coordinacion/chat','✉','Supervisión de chat'],['/coordinacion/privacidad','✓','Autorizaciones de menores'],['/coordinacion/crear-cuenta','＋','Crear cuenta'],['/coordinacion/configuracion','⚙','Configurar Resend']]:[])];
+    [...nav,...(user?.role==='coordinator'?[['/coordinacion','▦','Control de cuentas'],['/coordinacion/ediciones','▦','Ediciones y destinos'],['/coordinacion/candidaturas','▤','Candidaturas recibidas'],['/coordinacion/documentos','▣','Archivo documental'],['/coordinacion/grupos','♙','Grupos de movilidad'],['/coordinacion/chat','✉','Supervisión de chat'],['/coordinacion/privacidad','✓','Autorizaciones de menores'],['/coordinacion/crear-cuenta','＋','Crear cuenta'],['/coordinacion/configuracion/landing','⚙','Portada y galerías'],['/coordinacion/configuracion','⚙','Configurar Resend']]:[])];
   const sidebar=links.map(([href,icon,name],index)=>
     (user?.role==='coordinator'&&index===nav.length?'<span class="nav-divider">COORDINACIÓN</span>':'')+
     '<a class="nav'+(href===current?' current':'')+'" href="'+href+'" title="'+X(name)+'" aria-label="'+X(name)+'"><i aria-hidden="true">'+iconMarkup(icon)+'</i><span class="nav-label">'+X(name)+'</span></a>'
@@ -135,27 +137,26 @@ function destinationCards(items=destinationsForEdition()){
     '<div><span class="eyebrow">'+X(destination.country)+'</span><h3>'+X(destination.name)+'</h3><p>'+X(destination.description)+'</p>'+media.credit+'</div></article>';
   }).join('')+'</div>':'<div class="card"><p>No hay destinos activos para la edición seleccionada.</p></div>';
 }
-function visitorArrow(diagonal=false){
-  return '<svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="'+(diagonal?'M5 15 15 5M6 5h9v9':'M3.5 10h12m-5-5 5 5-5 5')+'"/></svg>';
-}
 function landing(req){
   const edition=activeEdition(),destinations=edition?destinationsForEdition(edition.id):[];
-  const cards=destinations.map((destination,index)=>{
-    const media=destinationMedia(destination);
-    return '<article class="visitor-destination"><div class="visitor-destination-image">'+
-    (media.image?'<img src="'+X(media.image)+'" alt="'+X(media.alt)+'" loading="lazy">':'<div class="visitor-destination-image-empty" aria-hidden="true"></div>')+
-    '<span class="visitor-destination-number">'+String(index+1).padStart(2,'0')+'</span><span class="visitor-destination-country">'+X(destination.country)+'</span></div><div class="visitor-destination-content"><h3>'+X(destination.name)+'</h3><p>'+X(destination.description)+'</p>'+media.credit+'<a href="/registro" aria-label="Solicitar cuenta para informarse sobre '+X(destination.name)+'">Solicitar cuenta'+visitorArrow()+'</a></div></article>';
-  }).join('');
-  const editionLabel=edition?.label||'Sin edición activa';
-  const countries=[...new Set(destinations.map(destination=>destination.country))].join(' y ');
-  const content=
-    '<section class="visitor-hero" aria-labelledby="visitor-title"><div class="visitor-hero-photo" aria-hidden="true"></div><div class="visitor-hero-copy"><p class="visitor-kicker"><span></span>IES Manuel Martín González · Tenerife</p><h1 id="visitor-title">Enriqueciendo vidas.<br><em>Abriendo mentes.</em></h1><p class="visitor-hero-description">Conecta con Europa. Organiza tu candidatura y participa en experiencias Erasmus+ de formación profesional.</p><div class="visitor-actions"><a class="visitor-button visitor-primary" href="/registro">Solicitar cuenta'+visitorArrow()+'</a><a class="visitor-button visitor-secondary" href="/acceso">Iniciar sesión'+visitorArrow(true)+'</a></div></div><div class="visitor-hero-caption"><span>IES MMG</span><span>Guía de Isora, Tenerife</span></div><span class="visitor-hero-index" aria-hidden="true">EU<br>26</span></section>'+
-    '<section class="visitor-intro" aria-label="Información del curso"><p class="visitor-intro-label">Movilidades Erasmus+</p><div><h2>Una experiencia de formación profesional en Europa.</h2><p>Descubre los destinos previstos para el curso '+X(editionLabel)+'.</p></div><a class="visitor-text-link" href="#destinos">Ver destinos'+visitorArrow()+'</a></section>'+
-    '<section class="visitor-destinations" id="destinos" aria-labelledby="visitor-destinations-title"><div class="visitor-section-heading"><div><p class="visitor-kicker"><span></span>Curso '+X(editionLabel)+'</p><h2 id="visitor-destinations-title">Europa, más cerca.</h2><p>Destinos Erasmus+'+(countries?' · '+X(countries):'')+'</p></div><span class="visitor-count">'+String(destinations.length).padStart(2,'0')+' <i>destinos</i></span></div><div class="visitor-destination-grid">'+(cards||'<p>No hay destinos activos publicados para esta edición.</p>')+'</div></section>'+
-    '<section class="visitor-route" aria-labelledby="visitor-route-title"><div class="visitor-route-marker" aria-hidden="true"><span class="visitor-marker-ring"><span></span></span><span class="visitor-marker-line"></span><span class="visitor-marker-dot"></span></div><div class="visitor-route-copy"><p class="visitor-kicker"><span></span>IES Manuel Martín González</p><h2 id="visitor-route-title">Desde Tenerife,<br>con rumbo a Europa.</h2><p>Movilidades Erasmus+ de formación profesional. Explora los destinos previstos y accede para conocer el espacio de candidatura.</p><a class="visitor-text-link" href="/acceso">Iniciar sesión'+visitorArrow()+'</a></div><div class="visitor-route-art" aria-hidden="true"><div class="visitor-route-orbit visitor-orbit-one"></div><div class="visitor-route-orbit visitor-orbit-two"></div><span class="visitor-route-island">TFE</span><span class="visitor-route-europe">EU</span><svg viewBox="0 0 360 220" fill="none"><path d="M55 154C101 95 140 76 185 106C232 138 255 115 304 55"/><circle cx="55" cy="154" r="5"/><circle cx="304" cy="55" r="5"/></svg></div></section>'+
-    '<section class="visitor-closing" aria-label="Acceso a la plataforma"><div><p class="visitor-kicker"><span></span>Tu próximo paso</p><h2>¿Quieres conocer la plataforma?</h2></div><div class="visitor-closing-actions"><a class="visitor-button visitor-primary" href="/registro">Solicitar cuenta'+visitorArrow()+'</a><a href="/acceso">Ya tengo cuenta'+visitorArrow(true)+'</a></div></section>'+
-    '<div class="visitor-footer"><a href="/" class="visitor-footer-brand">MMG<span>+</span><small>Movilidades Erasmus+</small></a><span>IES Manuel Martín González · Tenerife</span><a href="/privacidad">Privacidad'+visitorArrow(true)+'</a></div>';
-  layout(req,'Bienvenida',content,{publicPage:true,mainClass:'visitor-page',hideSidebar:true});
+  const config=getLandingSettings();
+  const content=renderVisitorLanding({
+    settings:{
+      title:config.title,eyebrow:config.eyebrow,heroTitle:config.hero_title,
+      heroDescription:config.hero_description,
+      aboutTitle:config.about_title,aboutText:config.about_text,
+      destinationsTitle:config.destinations_title,destinationsDescription:config.destinations_description,
+      galleryTitle:config.gallery_title,galleryDescription:config.gallery_description,
+      contactTitle:config.contact_title,contactDescription:config.contact_description,
+      heroImageUrl:config.hero_file_id?'/landing-media/'+config.hero_file_id:'',
+      contactEmail:config.contact_email,contactPhone:config.contact_phone,address:config.address,
+      socialInstagram:config.social_instagram,socialFacebook:config.social_facebook,socialYoutube:config.social_youtube
+    },
+    editionLabel:edition?.label||'Sin edición activa',
+    destinations,
+    galleryItems:publicLandingGallery()
+  });
+  layout(req,'Bienvenida',content,{publicPage:true,mainClass:'visitor-landing',hideSidebar:true});
 }
 function login(req,msg=''){
  layout(req,'Acceso','<div class="form-container"><p class="eyebrow">ÁREA PERSONAL</p><h1>Iniciar sesión</h1><p>Solo las cuentas con correo verificado y aprobadas por coordinación podrán acceder.</p>'+ (msg?formAlert(msg):'')+
