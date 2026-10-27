@@ -50,7 +50,9 @@ async function publishNotice(req,api){
  noticePage(req,api,'Aviso publicado y '+targets.length+' correo(s) incorporados a la cola de envío.');
 }
 function directory(u){
- return all("SELECT id,first_name,last_name,role FROM users WHERE status='approved' AND id!=? ORDER BY first_name,last_name LIMIT 200",u.id);
+ if(isAdmin(u))return all("SELECT id,first_name,last_name,role FROM users WHERE status='approved' AND id!=? ORDER BY first_name,last_name LIMIT 200",u.id);
+ // Participants see coordination and members of their own approved mobility groups only.
+ return all("SELECT DISTINCT u.id,u.first_name,u.last_name,u.role FROM users u WHERE u.status='approved' AND u.id!=? AND (u.role='coordinator' OR EXISTS (SELECT 1 FROM group_members a JOIN group_members b ON b.group_id=a.group_id WHERE a.user_id=? AND b.user_id=u.id)) ORDER BY u.first_name,u.last_name LIMIT 200",u.id,u.id);
 }
 function conversation(req,api,msg=''){
  const user=req.auth.user;
@@ -79,7 +81,7 @@ function conversation(req,api,msg=''){
   (selected||group?'<form method="post" action="/chat" class="form"><textarea name="content" rows="3" maxlength="2500" required placeholder="Escribe aquí..."></textarea>'+
    (selected?'<input type="hidden" name="receiver_id" value="'+selected.id+'">':'<input type="hidden" name="group_id" value="'+group.id+'">')+
    '<input type="hidden" name="csrf" value="'+E(api.csrf(req))+'"><button class="btn">Enviar mensaje</button></form>':'<p>Elige un destinatario o un grupo.</p>')+
-  '<p class="muted">Las comunicaciones están sujetas a la política de uso, moderación y protección de datos del centro. No se hacen copias ocultas.</p></section></div>';
+  '<p class="muted">Las comunicaciones pueden ser supervisadas por Coordinación de acuerdo con el protocolo del centro y dejando constancia del acceso. No se hacen copias ocultas a los participantes.</p></section></div>';
  api.layout(req,'Chat interno',output);
 }
 function sendChat(req,body,api){
@@ -88,7 +90,9 @@ function sendChat(req,body,api){
  if(text.length<1||Boolean(recipient)===Boolean(groupId)){conversation(req,api,'Debes seleccionar un destinatario o grupo y redactar el mensaje.');return;}
  if(recipient){
   const target=get("SELECT * FROM users WHERE id=? AND status='approved'",recipient);
-  if(!target||target.id===user.id){conversation(req,api,'Destinatario no válido.');return;}
+  if(!target||target.id===user.id||!directory(user).some(x=>x.id===target.id)){
+   conversation(req,api,'Destinatario no autorizado: solo coordinación y participantes de tus grupos.');return;
+  }
   const id=Number(run('INSERT INTO messages(sender_id,receiver_id,content) VALUES (?,?,?)',user.id,target.id,text).lastInsertRowid);
   queueMail(target.institutional_email,'Mensaje recibido · Erasmus+ MMG',
     'Tienes un mensaje nuevo de '+user.first_name+' '+user.last_name+
@@ -137,11 +141,23 @@ function assignMember(req,body,api){
  audit(req.auth.user.id,'group_member_added',uid);
  groupsPage(req,api,'Participante incorporado al grupo.');
 }
+
+function supervisor(req,api){
+ if(!api.mustAdmin(req))return;
+ const messages=all("SELECT m.id,m.content,m.created_at,s.first_name AS sender_first,s.last_name AS sender_last,r.first_name AS receiver_first,r.last_name AS receiver_last,g.name AS group_name FROM messages m JOIN users s ON s.id=m.sender_id LEFT JOIN users r ON r.id=m.receiver_id LEFT JOIN mobility_groups g ON g.id=m.group_id ORDER BY m.id DESC LIMIT 150");
+ audit(req.auth.user.id,'chat_supervision_accessed');
+ const cells=messages.map(m=>'<tr><td>'+E(m.created_at)+'</td><td>'+E(m.sender_first+' '+m.sender_last)+'</td><td>'+E(m.group_name||m.receiver_first+' '+m.receiver_last)+'</td><td><div class="preserve">'+E(m.content)+'</div></td></tr>');
+ api.layout(req,'Supervisión del chat',heading('COORDINACIÓN · SUPERVISIÓN','Supervisión de comunicaciones',
+   'Acceso restringido al coordinador y registrado en auditoría. La supervisión debe ser conocida por las personas participantes y ajustarse al protocolo institucional.')+
+   panel('Mensajes recientes',datatable(['Fecha','Emisor','Destino','Contenido'],cells)));
+}
+
 export async function socialRoutes(req,url,method,api){
- const routes=['/notificaciones','/chat','/coordinacion/avisos','/coordinacion/grupos','/coordinacion/grupos/asignar'];
+ const routes=['/notificaciones','/chat','/coordinacion/avisos','/coordinacion/grupos','/coordinacion/grupos/asignar','/coordinacion/chat'];
  if(!routes.includes(url))return false;
  if(!api.mustLogin(req))return true;
  if(url==='/notificaciones'&&method==='GET'){noticePage(req,api);return true;}
+ if(url==='/coordinacion/chat'&&method==='GET'){supervisor(req,api);return true;}
  if(url==='/chat'&&method==='GET'){conversation(req,api);return true;}
  if(url==='/chat'&&method==='POST'){
   const b=await api.readForm(req);if(api.requireCSRF(req,b))sendChat(req,b,api);return true;
