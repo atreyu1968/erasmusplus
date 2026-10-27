@@ -118,6 +118,18 @@ test('Valoración manual y agenda: seguridad por perfil, grupo y CSRF',async()=>
   assert.equal(teacherUpdated.status,200);
   assert.match(teacherUpdatedHtml,/Revisar documentación/);
   assert.match(teacherUpdatedHtml,/Reunión informativa/);
+  const unassigned=spawnSync(process.execPath,['--input-type=module','-e',[
+   "import {get,run} from './src/db.mjs';",
+   "const teacher=get(\"SELECT id FROM users WHERE username='DOCASIGNADO'\");",
+   "const result=run('DELETE FROM group_members WHERE group_id=? AND user_id=?',1,teacher.id);",
+   "if(result.changes!==1)process.exit(1);"
+  ].join('\n')],{env,encoding:'utf8',timeout:20000});
+  assert.equal(unassigned.status,0,unassigned.stderr);
+  const [revokedAgenda]=await page('/agenda/grupo/1',assignedTeacher);
+  assert.equal(revokedAgenda.status,404);
+  const [revokedOverview,revokedOverviewHtml]=await page('/agenda',assignedTeacher);
+  assert.equal(revokedOverview.status,200);
+  assert.doesNotMatch(revokedOverviewHtml,/Grupo Oporto/);
   const memberCsrf=memberPage[1].match(/name="csrf" value="([a-f0-9]+)"/)?.[1];assert.ok(memberCsrf);
   const done=await post('/agenda/tarea/1/completar',student,memberCsrf);
   assert.equal(done.status,303);
