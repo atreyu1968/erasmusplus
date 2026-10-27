@@ -17,6 +17,64 @@ function editionLabel(value) {
   return match[1]+'–'+match[2];
 }
 
+function transferIds(value) {
+  const values=Array.isArray(value)?value:[value];
+  if(!value)return [];
+  const ids=values.map(validId);
+  if(ids.some(id=>!id))throw Error('La selección de cuentas no es válida; vuelve a cargarla.');
+  return [...new Set(ids)];
+}
+
+function validateTransfer(sourceId,destinationId,accountIds) {
+  if(!sourceId||!destinationId)throw Error('Selecciona las convocatorias de origen y destino.');
+  if(sourceId===destinationId)throw Error('El origen y el destino deben ser distintos.');
+  const source=get('SELECT id,label FROM erasmus_editions WHERE id=?',sourceId);
+  const destination=get('SELECT id,label FROM erasmus_editions WHERE id=?',destinationId);
+  if(!source||!destination)throw Error('No se encuentra alguna de las convocatorias seleccionadas.');
+  if(!accountIds.length)throw Error('Selecciona al menos una cuenta para trasladar.');
+  const accounts=accountIds.map(id=>get(
+    "SELECT id FROM users WHERE id=? AND edition_id=? AND role IN ('student','teacher') AND status!='disabled'",
+    id,sourceId
+  ));
+  if(accounts.some(account=>!account))throw Error('La selección ha cambiado o contiene cuentas que no pertenecen al origen; vuelve a cargarla.');
+  return {source,destination};
+}
+
+function previewTransfer(body) {
+  const sourceId=validId(body.source_edition_id),destinationId=validId(body.destination_edition_id);
+  const accountIds=transferIds(body.account_ids);
+  const editions=validateTransfer(sourceId,destinationId,accountIds);
+  return {
+    message:'Se cambiarán '+accountIds.length+' '+(accountIds.length===1?'cuenta':'cuentas')+
+      ' de '+editions.source.label+' a '+editions.destination.label+'.',
+    selectedId:sourceId,
+    transfer:{sourceId,destinationId,accountIds,review:true}
+  };
+}
+
+function saveTransfer(body,actorId) {
+  const sourceId=validId(body.source_edition_id),destinationId=validId(body.destination_edition_id);
+  const accountIds=transferIds(body.account_ids);
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const {source,destination}=validateTransfer(sourceId,destinationId,accountIds);
+    for(const accountId of accountIds) {
+      run("UPDATE users SET edition_id=? WHERE id=? AND edition_id=? AND role IN ('student','teacher') AND status!='disabled'",
+        destinationId,accountId,sourceId);
+      audit(actorId,'admin_user_edition_bulk_reassigned_'+sourceId+'_to_'+destinationId,accountId);
+    }
+    db.exec('COMMIT');
+    return {
+      message:accountIds.length+' '+(accountIds.length===1?'cuenta trasladada':'cuentas trasladadas')+
+        ' de '+source.label+' a '+destination.label+'. Las candidaturas históricas se mantienen en su edición original.',
+      selectedId:sourceId
+    };
+  } catch(error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 function secureUrl(value,label,{allowLocal=false}={}) {
   const raw=clean(value,600);
   if(!raw)return '';
@@ -76,7 +134,7 @@ function destinationForm(edition,destination,csrf) {
     :'<form class="card form" method="post" action="/coordinacion/ediciones">'+content+'</form>';
 }
 
-function render(req,api,message='',selectedId=null) {
+function render(req,api,message='',selectedId=null,transferState=null) {
   const editions=all(
     'SELECT e.*,(SELECT COUNT(*) FROM erasmus_destinations d WHERE d.edition_id=e.id AND d.is_active=1) AS destination_count,'+
     '(SELECT COUNT(*) FROM applications a WHERE a.edition_id=e.id) AS application_count,'+
@@ -86,6 +144,10 @@ function render(req,api,message='',selectedId=null) {
   const current=activeEdition();
   const requested=validId(selectedId||new URL(req.url,'http://localhost').searchParams.get('edicion'));
   const selected=editions.find(edition=>edition.id===requested)||editions.find(edition=>edition.is_active)||editions[0]||null;
+  const params=new URL(req.url,'http://localhost').searchParams;
+  const sourceId=transferState?.sourceId||validId(params.get('origen'));
+  const destinationId=transferState?.destinationId||validId(params.get('destino'));
+  const selectedIds=transferState?.accountIds||[];
   const csrf=E(api.csrf(req));
   let html=heading('COORDINACIÓN · ERASMUS+','Ediciones y destinos',
     'Crea ediciones académicas, elige cuál está vigente y administra sus destinos sin borrar el historial de candidaturas.');
@@ -117,6 +179,52 @@ function render(req,api,message='',selectedId=null) {
         '</td></tr>';
     }).join(''):'<tr><td colspan="5">No hay ediciones guardadas.</td></tr>')+
     '</tbody></table></div></section>';
+
+  html+='<section id="reasignar"><div class="heading"><p class="eyebrow">GESTIÓN DE CUENTAS</p>'+
+    '<h2>Reasignar cuentas entre convocatorias</h2>'+
+    '<p>El traslado cambia la convocatoria asignada a las cuentas seleccionadas; las candidaturas existentes permanecen en la edición en que se presentaron.</p></div>'+
+    '<form class="card form" method="get" action="/coordinacion/ediciones#reasignar">'+
+    '<div class="fields"><label>Convocatoria de origen<select name="origen" required><option value="">Selecciona el origen</option>'+
+    editions.map(edition=>'<option value="'+edition.id+'"'+(sourceId===edition.id?' selected':'')+'>'+E(edition.label)+'</option>').join('')+
+    '</select></label><label>Convocatoria de destino<select name="destino" required><option value="">Selecciona el destino</option>'+
+    editions.map(edition=>'<option value="'+edition.id+'"'+(destinationId===edition.id?' selected':'')+'>'+E(edition.label)+'</option>').join('')+
+    '</select></label></div><button class="btn secondary" type="submit">Ver cuentas de origen</button></form>';
+  const source=editions.find(edition=>edition.id===sourceId);
+  const destination=editions.find(edition=>edition.id===destinationId);
+  if(source&&destination&&sourceId!==destinationId) {
+    const accounts=all(
+      "SELECT id,role,username,first_name,last_name,status FROM users WHERE edition_id=? AND role IN ('student','teacher') AND status!='disabled' ORDER BY role, last_name COLLATE NOCASE, first_name COLLATE NOCASE",
+      sourceId
+    );
+    const selectedSet=new Set(selectedIds);
+    html+='<form class="card form" method="post" action="/coordinacion/ediciones#reasignar">'+
+      '<h3>Cuentas de '+E(source.label)+'</h3>'+
+      (accounts.length?accounts.map(account=>
+        '<label class="checkbox"><input type="checkbox" name="account_ids" value="'+account.id+'"'+
+        (selectedSet.has(account.id)?' checked':'')+'> '+E(account.first_name+' '+account.last_name)+
+        ' · '+(account.role==='teacher'?'Docente':'Alumno')+' · '+E(account.username)+
+        ' · '+E(account.status)+'</label>'
+      ).join(''):'<p>No hay cuentas activas para trasladar desde esta convocatoria.</p>')+
+      '<input type="hidden" name="action" value="preview-edition-transfer">'+
+      '<input type="hidden" name="source_edition_id" value="'+source.id+'">'+
+      '<input type="hidden" name="destination_edition_id" value="'+destination.id+'">'+
+      '<input type="hidden" name="csrf" value="'+csrf+'">'+
+      '<button class="btn" type="submit"'+(accounts.length?'':' disabled')+'>Revisar traslado</button></form>';
+    if(transferState?.review&&transferState.sourceId===source.id&&transferState.destinationId===destination.id) {
+      html+='<section class="card"><h3>Confirma el traslado</h3><p><b>Se cambiarán '+transferState.accountIds.length+
+        ' '+(transferState.accountIds.length===1?'cuenta':'cuentas')+'</b> de '+E(source.label)+' a '+E(destination.label)+
+        '. Las candidaturas históricas no cambiarán de edición.</p>'+
+        '<form method="post" action="/coordinacion/ediciones#reasignar">'+
+        '<input type="hidden" name="action" value="confirm-edition-transfer">'+
+        '<input type="hidden" name="source_edition_id" value="'+source.id+'">'+
+        '<input type="hidden" name="destination_edition_id" value="'+destination.id+'">'+
+        transferState.accountIds.map(id=>'<input type="hidden" name="account_ids" value="'+id+'">').join('')+
+        '<input type="hidden" name="csrf" value="'+csrf+'"><button class="btn" type="submit">Confirmar traslado</button></form></section>';
+    }
+  } else if(sourceId&&destinationId) {
+    html+=panel('Convocatorias iguales','<p>Selecciona convocatorias de origen y destino distintas.</p>');
+  }
+  html+='</section>';
 
   if(selected) {
     const destinations=destinationsForEdition(selected.id,{includeInactive:true});
@@ -242,10 +350,16 @@ export async function editionRoutes(req,url,method,api) {
   const body=await api.readForm(req);
   if(!api.requireCSRF(req,body))return true;
   let result;
+  let transferState=null;
   try {
     const action=String(body.action||'');
     if(['create-edition','rename-edition','activate-edition'].includes(action))
       result=saveEdition(body,req.auth.user.id,action);
+    else if(action==='preview-edition-transfer') {
+      result=previewTransfer(body);
+      transferState=result.transfer;
+    } else if(action==='confirm-edition-transfer')
+      result=saveTransfer(body,req.auth.user.id);
     else if(['create-destination','save-destination'].includes(action))
       result=saveDestination(body,req.auth.user.id,action);
     else if(action==='destination-status')
@@ -253,9 +367,13 @@ export async function editionRoutes(req,url,method,api) {
     else throw Error('Acción no válida.');
   } catch(error) {
     const selectedId=validId(body.edition_id);
-    render(req,api,error.message,selectedId);
+    let accountIds=[];
+    try { accountIds=transferIds(body.account_ids); } catch {}
+    transferState={sourceId:validId(body.source_edition_id),
+      destinationId:validId(body.destination_edition_id),accountIds};
+    render(req,api,error.message,selectedId||transferState.sourceId,transferState);
     return true;
   }
-  render(req,api,result.message,result.selectedId);
+  render(req,api,result.message,result.selectedId,transferState);
   return true;
 }

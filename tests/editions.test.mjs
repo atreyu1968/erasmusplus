@@ -23,12 +23,18 @@ test('Las convocatorias separan destinos, cuentas y candidaturas conservando el 
    "const hash=await hashPassword('Password-prueba-2026!');",
    "run(\"INSERT INTO users(role,username,pass_hash,first_name,last_name,institutional_email,email_verified_at,status) VALUES ('coordinator','EDITIONADMIN',?,'Coordinación','Prueba','admin@canariaseducacion.es',CURRENT_TIMESTAMP,'approved')\",hash);",
    "const student=run(\"INSERT INTO users(role,username,pass_hash,first_name,last_name,birth_date,cial,institutional_email,email_verified_at,status,professional_family,center,edition_id) VALUES ('student','EDITIONSTUDENT',?,'Alumna','Prueba','2004-05-06','EDITIONSTUDENT','student@canariaseducacion.es',CURRENT_TIMESTAMP,'approved','Administración y gestión','IES Manuel Martín González',?)\",hash,edition.id);",
-   "console.log('PARTICIPANT_ID='+student.lastInsertRowid);"
+   "const otherStudent=run(\"INSERT INTO users(role,username,pass_hash,first_name,last_name,birth_date,cial,institutional_email,email_verified_at,status,professional_family,center,edition_id) VALUES ('student','EDITIONSTAY',?,'Alumna','SinMover','2004-05-06','EDITIONSTAY','stay@canariaseducacion.es',CURRENT_TIMESTAMP,'approved','Administración y gestión','IES Manuel Martín González',?)\",hash,edition.id);",
+   "const teacher=run(\"INSERT INTO users(role,username,pass_hash,first_name,last_name,birth_date,dni,institutional_email,email_verified_at,status,center,edition_id) VALUES ('teacher','EDITIONTEACHER',?,'Docente','Prueba','1980-05-06','EDITIONTEACHER','teacher@canariaseducacion.es',CURRENT_TIMESTAMP,'approved','IES Manuel Martín González',?)\",hash,edition.id);",
+   "console.log('PARTICIPANT_ID='+student.lastInsertRowid);",
+   "console.log('STAY_ID='+otherStudent.lastInsertRowid);",
+   "console.log('TEACHER_ID='+teacher.lastInsertRowid);"
   ].join('\n');
   const seed=spawnSync(process.execPath,['--input-type=module','-e',seedScript],{cwd:process.cwd(),env,encoding:'utf8',timeout:30000});
   assert.equal(seed.status,0,seed.stderr);
   const participantId=seed.stdout.match(/PARTICIPANT_ID=(\d+)/)?.[1];
-  assert.ok(participantId,'La cuenta ficticia debe quedar preparada.');
+  const stayId=seed.stdout.match(/STAY_ID=(\d+)/)?.[1];
+  const teacherId=seed.stdout.match(/TEACHER_ID=(\d+)/)?.[1];
+  assert.ok(participantId&&stayId&&teacherId,'Las cuentas ficticias deben quedar preparadas.');
 
   child=spawn(process.execPath,['src/server.mjs'],{cwd:process.cwd(),env,stdio:['ignore','pipe','pipe']});
   let stderr='';child.stderr.on('data',chunk=>stderr+=chunk);
@@ -55,7 +61,7 @@ test('Las convocatorias separan destinos, cuentas y candidaturas conservando el 
   }
   const manifest=await (await fetch(base+'/manifest.webmanifest')).json();
   assert.ok(manifest.icons.some(icon=>icon.src==='/erasmus-favicon-192.png'));
-   const photo=await fetch(base+'/images/viseu-cathedral.jpg');
+  const photo=await fetch(base+'/images/viseu-cathedral.jpg');
   assert.equal(photo.status,200);
   assert.match(photo.headers.get('content-type')||'',/image\/jpeg/);
 
@@ -130,18 +136,30 @@ test('Las convocatorias separan destinos, cuentas y candidaturas conservando el 
     destination:'Lisboa',motivation:'Quiero mejorar mi formación profesional y aprender en un entorno internacional.',mec:'No',intent:'submit'})});
   assert.match(await forged.text(),/no está asignada a la convocatoria vigente/);
 
-  const editPage=await fetch(base+'/coordinacion/editar/'+participantId,{headers:{Cookie:coordinator.cookie}});
-  const editHtml=await editPage.text();
-  const editCsrf=editHtml.match(/name="csrf" value="([a-f0-9]+)"/)?.[1];
-  assert.ok(editCsrf);
-  const reassigned=await fetch(base+'/coordinacion/editar/'+participantId,{method:'POST',headers:{
+  const transferPage=await fetch(base+'/coordinacion/ediciones?origen='+oldEditionId+'&destino='+newEditionId,
+   {headers:{Cookie:coordinator.cookie}});
+  html=await transferPage.text();
+  assert.match(html,/Alumna Prueba/);
+  assert.match(html,/Docente Prueba/);
+  assert.match(html,/Alumna SinMover/);
+  const preview=await fetch(base+'/coordinacion/ediciones',{method:'POST',headers:{
    'Content-Type':'application/x-www-form-urlencoded',Cookie:coordinator.cookie},
-   body:new URLSearchParams({csrf:editCsrf,first_name:'Alumna',last_name:'Prueba',
-    birth_date:'2004-05-06',dni:'',cial:'EDITIONSTUDENT',phone:'',guardian_phone:'',
-    institutional_email:'student@canariaseducacion.es',gmail:'',
-    professional_family:'Administración y gestión',edition_id:newEditionId,
-    center:'IES Manuel Martín González',studies:'',modules:''})});
-  assert.match(await reassigned.text(),/Ficha actualizada/);
+   body:new URLSearchParams([
+    ['csrf',adminCsrf],['action','preview-edition-transfer'],['source_edition_id',oldEditionId],
+    ['destination_edition_id',newEditionId],['account_ids',participantId],['account_ids',teacherId]
+   ])});
+  html=await preview.text();
+  assert.match(html,/Se cambiarán 2 cuentas/);
+  assert.match(html,/Confirmar traslado/);
+  const confirm=await fetch(base+'/coordinacion/ediciones',{method:'POST',headers:{
+   'Content-Type':'application/x-www-form-urlencoded',Cookie:coordinator.cookie},
+   body:new URLSearchParams([
+    ['csrf',adminCsrf],['action','confirm-edition-transfer'],['source_edition_id',oldEditionId],
+    ['destination_edition_id',newEditionId],['account_ids',participantId],['account_ids',teacherId]
+   ])});
+  html=await confirm.text();
+  assert.match(html,/2 cuentas trasladadas/);
+  assert.match(html,/candidaturas históricas se mantienen/);
 
   const assignedPage=await fetch(base+'/candidatura',{headers:{Cookie:participant.cookie}});
   html=await assignedPage.text();
@@ -156,6 +174,19 @@ test('Las convocatorias separan destinos, cuentas y candidaturas conservando el 
   const dashboard=await (await fetch(base+'/panel',{headers:{Cookie:participant.cookie}})).text();
   assert.match(dashboard,/2026–2027 · Oporto/);
   assert.match(dashboard,/2027–2028 · Lisboa/);
+  const inspect=spawnSync(process.execPath,['--input-type=module','-e',[
+   "import {all} from './src/db.mjs';",
+   "const ids=process.env.TEST_IDS.split(',').map(Number);",
+   "console.log(JSON.stringify({users:all('SELECT id,edition_id FROM users WHERE id IN (?,?,?) ORDER BY id',...ids),applications:all('SELECT edition_id,status FROM applications WHERE user_id=? ORDER BY edition_id',ids[0]),audit:all(\"SELECT action,target_id FROM audit WHERE action LIKE 'admin_user_edition_bulk_reassigned_%' ORDER BY target_id\")}));"
+  ].join('\n')],{cwd:process.cwd(),env:{...env,TEST_IDS:[participantId,stayId,teacherId].join(',')},encoding:'utf8',timeout:30000});
+  assert.equal(inspect.status,0,inspect.stderr);
+  const state=JSON.parse(inspect.stdout.trim());
+  assert.deepEqual(state.users.map(user=>[user.id,user.edition_id]),[
+   [Number(participantId),Number(newEditionId)],[Number(stayId),Number(oldEditionId)],[Number(teacherId),Number(newEditionId)]
+  ].sort((a,b)=>a[0]-b[0]));
+  assert.deepEqual(state.applications.map(application=>application.edition_id),[Number(oldEditionId),Number(newEditionId)]);
+  assert.deepEqual(state.audit.map(entry=>entry.target_id).sort((a,b)=>a-b),[Number(participantId),Number(teacherId)].sort((a,b)=>a-b));
+  assert.ok(state.audit.every(entry=>entry.action.includes('_'+oldEditionId+'_to_'+newEditionId)));
  }finally{
   if(child?.pid){child.kill('SIGTERM');await new Promise(resolve=>setTimeout(resolve,80));}
   rmSync(data,{recursive:true,force:true});
