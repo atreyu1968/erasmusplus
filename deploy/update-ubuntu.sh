@@ -35,7 +35,14 @@ SWITCHED=0
 STOPPED=0
 
 log() { printf '[ERASMUS-MMG] %s\n' "$*"; }
-die() { log "ERROR: $*"; if declare -F rollback >/dev/null 2>&1; then rollback 1; else exit 1; fi; }
+die() {
+  log "ERROR: $*"
+  if declare -F rollback >/dev/null 2>&1; then
+    trap - ERR INT TERM
+    rollback 1
+  fi
+  exit 1
+}
 [[ "$EUID" == 0 ]] || die 'Se requiere sudo/root.'
 [[ "${1:-}" == "" || "${1:-}" == "--scheduled" ]] || die 'Uso: erasmusplus-update [--scheduled]'
 [[ -f "$SETTINGS" ]] && source "$SETTINGS"
@@ -108,10 +115,13 @@ log "Validando versión $NEW_SHA antes de detener el servicio."
   cd "$STAGE"
   npm ci --omit=dev --ignore-scripts --no-audit --no-fund
   find src scripts -name '*.mjs' -print0 | xargs -0 -n1 node --check
-  # mktemp crea el directorio con permisos 0700: sin esta línea el usuario
-  # nobody no puede entrar y las pruebas fallan en un despliegue real.
-  chmod 0755 "$STAGE"
-  runuser -u nobody -- env HOME=/tmp npm test
+  # Con umask 077, tanto git clone como npm ci crean archivos y subcarpetas
+  # con permisos 0600/0700. Abrir solo STAGE no basta: package.json y src/
+  # continuarían inaccesibles para el usuario 'nobody'.
+  # Los directorios de release solo contienen código público y dependencias.
+  chmod -R a+rX "$STAGE"
+  chmod -R go-w "$STAGE"
+  runuser -u nobody -- env HOME=/tmp npm_config_cache=/tmp/mmg-npm-test-cache npm test
 )
 printf '%s\n' "$NEW_SHA" > "$STAGE/.revision"
 chmod -R a+rX "$STAGE"
