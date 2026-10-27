@@ -120,6 +120,19 @@ test('Valoración manual y agenda: seguridad por perfil, grupo y CSRF',async()=>
   assert.equal(teacherUpdated.status,200);
   assert.match(teacherUpdatedHtml,/Revisar documentación/);
   assert.match(teacherUpdatedHtml,/Reunión informativa/);
+   const assignedTeacherCsrf=teacherUpdatedHtml.match(/name="csrf" value="([a-f0-9]+)"/)?.[1];
+   assert.ok(assignedTeacherCsrf);
+   const teacherCompletion=await post('/agenda/tarea/1/completar',assignedTeacher,assignedTeacherCsrf);
+   assert.equal(teacherCompletion.status,303);
+   const [teacherAfterCompletion,teacherAfterCompletionHtml]=await page('/agenda/grupo/1',assignedTeacher);
+   assert.equal(teacherAfterCompletion.status,200);
+   assert.match(teacherAfterCompletionHtml,/Completada/);
+   const assignedCompletionCheck=spawnSync(process.execPath,['--input-type=module','-e',[
+    "import {get} from './src/db.mjs';",
+    "console.log(get(\"SELECT COUNT(*) AS n FROM mobility_task_completions c JOIN users u ON u.id=c.user_id WHERE c.task_id=1 AND u.username='DOCASIGNADO'\").n);"
+   ].join('\n')],{env,encoding:'utf8',timeout:20000});
+   assert.equal(assignedCompletionCheck.status,0,assignedCompletionCheck.stderr);
+   assert.equal(assignedCompletionCheck.stdout.trim(),'1');
   const unassigned=spawnSync(process.execPath,['--input-type=module','-e',[
    "import {get,run} from './src/db.mjs';",
    "const teacher=get(\"SELECT id FROM users WHERE username='DOCASIGNADO'\");",
