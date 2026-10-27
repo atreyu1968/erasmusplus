@@ -150,8 +150,18 @@ test('Valoración manual y agenda: seguridad por perfil, grupo y CSRF',async()=>
   const memberCsrf=memberPage[1].match(/name="csrf" value="([a-f0-9]+)"/)?.[1];assert.ok(memberCsrf);
   const done=await post('/agenda/tarea/1/completar',student,memberCsrf);
   assert.equal(done.status,303);
+  const resent=await post('/agenda/tarea/1/completar',student,memberCsrf);
+  assert.equal(resent.status,303);
   const [after,ah]=await page('/agenda/grupo/1',student);
   assert.equal(after.status,200);assert.match(ah,/Completada/);
+  const completionAuditCheck=spawnSync(process.execPath,['--input-type=module','-e',[
+    "import {get} from './src/db.mjs';",
+    "const completion=get(\"SELECT COUNT(*) AS n FROM mobility_task_completions c JOIN users u ON u.id=c.user_id WHERE c.task_id=1 AND u.username='TESTUNO'\").n;",
+    "const audits=get(\"SELECT COUNT(*) AS n FROM audit a JOIN users u ON u.id=a.actor_id WHERE a.action='mobility_task_completed' AND a.target_id=1 AND u.username='TESTUNO'\").n;",
+    "console.log(JSON.stringify({completion,audits}));"
+  ].join('\n')],{env,encoding:'utf8',timeout:20000});
+  assert.equal(completionAuditCheck.status,0,completionAuditCheck.stderr);
+  assert.deepEqual(JSON.parse(completionAuditCheck.stdout.trim()),{completion:1,audits:1});
   const disallowed=await post('/agenda/tarea/1/completar',other,
      (await page('/panel',other))[1].match(/name="csrf" value="([a-f0-9]+)"/)?.[1]||'none');
   assert.equal(disallowed.status===403||disallowed.status===404,true);

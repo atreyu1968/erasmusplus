@@ -139,8 +139,8 @@ function complete(req,api,id){
  const t=get('SELECT * FROM mobility_tasks WHERE id=?',id);
  if(!t||!canSee(req.auth.user,t.group_id)){api.error(req,404,'Tarea no encontrada.');return;}
  if(req.auth.user.role==='coordinator'){api.error(req,403,'La coordinación no completa tareas en nombre de participantes.');return;}
- run('INSERT OR IGNORE INTO mobility_task_completions(task_id,user_id) VALUES (?,?)',id,req.auth.user.id);
- audit(req.auth.user.id,'mobility_task_completed',id);
+  const completion=run('INSERT OR IGNORE INTO mobility_task_completions(task_id,user_id) VALUES (?,?)',id,req.auth.user.id);
+  if(completion.changes) audit(req.auth.user.id,'mobility_task_completed',id);
  api.redirect(req,'/agenda/grupo/'+t.group_id);
 }
 export async function agendaRoutes(req,url,method,api){
