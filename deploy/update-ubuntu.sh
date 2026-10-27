@@ -21,7 +21,7 @@ BIND_HOST=$(sed -n 's/^HOST=//p' "$APP_ENV" | head -n 1)
 BIND_PORT=$(sed -n 's/^PORT=//p' "$APP_ENV" | head -n 1)
 BIND_HOST=${BIND_HOST:-127.0.0.1}
 BIND_PORT=${BIND_PORT:-3000}
-[[ "$BIND_HOST" =~ ^[0-9]{1,3}(\\.[0-9]{1,3}){3}$ ]] || {
+[[ "$BIND_HOST" =~ ^[0-9]{1,3}([.][0-9]{1,3}){3}$ ]] || {
   echo 'HOST debe ser una IPv4 privada o 127.0.0.1 para la comprobación de salud.' >&2
   exit 1
 }
