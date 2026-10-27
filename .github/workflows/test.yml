@@ -20,7 +20,12 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       - name: Instalar dependencias
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Comprobar scripts de Ubuntu
+        run: |
+          bash -n deploy/install-ubuntu.sh
+          bash -n deploy/update-ubuntu.sh
+          bash -n deploy/init-admin-ubuntu.sh
       - name: Verificar sintaxis
         run: |
           node --check src/server.mjs
