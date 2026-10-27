@@ -16,6 +16,8 @@ The preview opens the Spanish-language public homepage. `/acceso` is the login p
 - Dependencies are defined in `package.json` and `package-lock.json`; restore with `npm ci` if needed.
 - Run `npm run check` and `npm test` for the existing checks. Tests use temporary databases and fictional accounts.
 
+After task merges, `scripts/post-merge.sh` restores locked dependencies and runs the syntax check. Replit then reconciles the running workflows. The hook does not change secrets, create accounts, or alter application data.
+
 ## Storage and access
 
 SQLite and uploaded files live under `data/` by default. This folder, dependencies, local environment files, and database files are excluded from Git. Do not delete the folder if its contents need to be retained.
