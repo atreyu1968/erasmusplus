@@ -1,106 +1,154 @@
 # Movilidades Erasmus+ MMG
 
-Plataforma de movilidad Erasmus+ del **IES Manuel Martín González** (Guía de Isora, Tenerife).
+Aplicación de gestión Erasmus+ del **IES Manuel Martín González (Guía de Isora, Tenerife)**. Node.js 24, SQLite, Resend, interfaz adaptable y PWA. Repositorio público de código; **nunca** almacena datos reales, bases SQLite o secretos en GitHub.
 
-**Versión 0.3.0 — versión funcional para pruebas.** Backend Node.js 24 con SQLite mediante node:sqlite, WebAuthn con SimpleWebAuthn y frontend responsive/PWA.
+> **Estado:** versión de desarrollo para pruebas con datos ficticios. No abrir registros de alumnado real sin revisión técnica, autorización del centro y validación de protección de datos. El instalador deja el registro cerrado y las actualizaciones automáticas sin aplicar hasta su autorización.
 
-## Funcionalidades implementadas
+## 1. Instalación desde cero en Ubuntu, aunque no tenga Git ni cURL
 
-- Registro para docentes y alumnado; usuario automático por DNI / CIAL.
-- Contraseñas derivadas mediante \`scrypt\` y sesiones privadas guardadas en SQLite.
-- **Verificación del correo institucional con Resend** mediante enlace de un solo uso y caducidad de 24 horas.
-- **Aprobación manual obligatoria**: únicamente Coordinación puede activar una cuenta cuyo correo ya esté verificado.
-- Panel administrativo con fichas de usuarios, recuentos, aprobación y desactivación.
-- **Configuración privada de Resend** en \`/coordinacion/configuracion\`, con API Key cifrada mediante AES-256-GCM en SQLite.
-- Aviso de aprobación por correo (si Resend funciona correctamente).
-- Vistas informativas de Viseu, Oporto, Róterdam y modalidades 2026–2027.
-- Auditoría básica, CSRF, protección de cookies e intentos de acceso limitados.
+**Requisitos:** Ubuntu Server 22.04, 24.04 o 26.04 LTS de 64 bits (`amd64`/`arm64`), acceso administrativo `sudo`, `apt` operativo, Internet saliente por HTTPS y systemd. No se admiten versiones sin soporte estándar como Ubuntu 20.04: debe actualizarse o migrarse con el equipo TIC. El túnel **Cloudflare Tunnel ya instalado** se conserva tal como está.
 
-No se emplean SMS. Las API Keys **no se incluyen en el repositorio**.
+Antes de instalar, comprobar versión y espacio disponible:
 
-## Requisitos
+```bash
+cat /etc/os-release
+df -h
+sudo systemctl status cloudflared --no-pager
+```
 
-Ubuntu 24.04 LTS o posterior, Node.js **24 LTS**, subdominio institucional y HTTPS mediante el **Cloudflare Tunnel ya instalado**. No es necesario instalar Nginx para esta arquitectura.
+El servidor está desactualizado: **realizar una instantánea o copia de seguridad previa** y coordinar con TIC la actualización del sistema operativo. El instalador solo ejecuta `apt-get update` e instala los paquetes necesarios; **no ejecuta silenciosamente un `dist-upgrade`, no reinicia Ubuntu y no altera el túnel existente**. Para revisar actualizaciones del sistema de manera separada:
 
-## Instalar en Ubuntu (solo pruebas locales)
+```bash
+sudo apt-get update
+sudo apt-get upgrade
+```
 
-\`\`\`bash
+Si APT falla debido a repositorios antiguos o certificados caducados, resolverlo antes de continuar. Consultar posibles reinicios y comprobar que `cloudflared` sigue funcionando después de actualizar Ubuntu.
+
+### Descargar el instalador sin disponer previamente de Git ni cURL
+
+Ejecutar en una terminal Ubuntu con un usuario autorizado a utilizar `sudo`:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates git curl
 git clone https://github.com/atreyu1968/erasmusplus.git
 cd erasmusplus
-node --version
-cp .env.example .env
-\`\`\`
+sudo bash deploy/install-ubuntu.sh
+```
 
-Configura \`.env\`, sobre todo \`MMG_SECRET\` con 48 o más caracteres aleatorios (puedes generar el valor con \`openssl rand -hex 48\`). No subas este archivo a Git.
+Los dos primeros comandos instalan precisamente las herramientas que faltan. **No hay que ejecutar código descargado directamente con `curl | bash`.** Se descarga el repositorio, se puede revisar `deploy/install-ubuntu.sh` y después se ejecuta. Si se prefiere, se puede copiar el repositorio al servidor desde un equipo de administración.
 
-\`\`\`bash
-npm install
-npm run init-admin
-npm start
-\`\`\`
+El instalador realiza automáticamente estas operaciones:
 
-Para \`npm run init-admin\` hay que definir previamente en \`.env\` las variables \`MMG_ADMIN_USERNAME\`, \`MMG_ADMIN_PASSWORD\` (mínimo 16 caracteres) y \`MMG_ADMIN_EMAIL\`. **Borra estas variables del archivo después del alta.** El usuario coordinador se crea una única vez, desde consola, no mediante registro público.
+1. Verifica Ubuntu y actualiza índices APT; instala `git`, `curl`, certificados, GnuPG, `age`, OpenSSL y herramientas de actualización.
+2. Instala **Node.js 24** mediante el repositorio APT firmado de NodeSource, si no existe una versión adecuada. Usa su clave GPG y comprueba la versión al terminar.
+3. Crea el usuario limitado `erasmusmmg`, las carpetas privadas y los servicios `systemd`.
+4. Genera `MMG_SECRET` aleatorio y conserva cualquier configuración privada ya existente.
+5. Crea claves `age` para cifrar las copias de seguridad; **guarda una copia offline** de la clave privada bajo custodia institucional.
+6. Descarga el código, verifica sintaxis, instala dependencias mediante `npm ci` y ejecuta las pruebas automáticas antes de activar el servicio.
+7. Instala el actualizador diario, inicialmente en modo **sin aplicación automática** por seguridad.
 
-En pruebas locales abre \`http://127.0.0.1:3000\`.
+### Crear la primera cuenta de coordinación
 
-> **Importante:** el registro viene deshabilitado. No modifiques \`MMG_ENABLE_REGISTRATION=0\` ni la versión de privacidad hasta que el centro haya aprobado el aviso, las medidas técnicas y los procedimientos para tratar datos reales.
+```bash
+sudo /usr/local/sbin/erasmusplus-init-admin
+```
 
-## Configuración de Resend desde el panel
+El asistente solicita identificador, correo institucional y contraseña (oculta mientras se escribe). No guarda la contraseña en archivos de configuración. Solo se puede crear la primera cuenta de coordinación mediante consola.
 
-1. Accede con la cuenta de Coordinación.
-2. Entra en **Configurar Resend**.
-3. Introduce la **API Key**, el **correo remitente autorizado** y la **URL pública HTTPS** de la web.
-4. Guarda: la clave se cifra con un secreto derivado de \`MMG_SECRET\` y se guarda en SQLite; no se vuelve a mostrar en el navegador.
-5. Comprueba el envío mediante el botón de prueba dirigido al correo institucional de Coordinación.
+### Comprobar el servicio
 
-Debes **verificar el dominio remitente y sus registros DNS en el panel de Resend**. El correo remitente configurado debe pertenecer a ese dominio o a uno autorizado. Resend no habilita por sí solo el subdominio institucional del centro; esa publicación corresponde al equipo TIC.
+```bash
+sudo systemctl status erasmusplus --no-pager
+curl -fsS http://127.0.0.1:3000/healthz
+sudo journalctl -u erasmusplus -n 60 --no-pager
+```
 
-**No cambies \`MMG_SECRET\` sin planificar la rotación**, porque protege las claves guardadas y las sesiones.
+El control de salud debe devolver `ok`. **Node solo escucha en `127.0.0.1:3000`: no abrir el puerto 3000 al exterior.**
 
-## Flujo de registro
+## 2. Acceso mediante tu Cloudflare Tunnel existente
 
-1. Docente o alumnado rellena los formularios.
-2. La aplicación guarda la cuenta como \`pending\`.
-3. Resend envía un enlace al correo \`@canariaseducacion.es\`.
-4. El usuario confirma el correo.
-5. Las personas adultas registran electrónicamente la lectura del aviso; las menores de 18 años entregan un PDF firmado por su representante, que coordinación revisa en **Autorizaciones de menores**.
-6. El coordinador aprueba solo si el correo está verificado y el requisito de privacidad o autorización se ha completado.
-7. La aplicación envía un aviso de resolución mediante Resend.
+En Cloudflare Zero Trust, selecciona el túnel ya instalado y crea una **ruta de aplicación publicada** con el subdominio institucional aprobado. El destino u origen HTTP de esa ruta será:
 
-La pantalla **Reenviar verificación** permite pedir otro enlace si el inicial caducó o no llegó. El sistema no confirma públicamente la existencia de una cuenta.
+```text
+http://127.0.0.1:3000
+```
 
-## Despliegue con Cloudflare Tunnel existente y systemd
+El usuario navegará por `https://TU-SUBDOMINIO-INSTITUCIONAL`. El dominio ilustrativo debe sustituirse por el autorizado. Cloudflare establece la conexión saliente desde `cloudflared`; no es necesario Nginx ni abrir puertos en el router. Si `cloudflared` se ejecuta en otra máquina o contenedor, hay que adaptar y proteger el tramo interno.
 
-Hay ejemplos iniciales en \`deploy/\`, que deben adaptarse al subdominio institucional, usuario de servicio, permisos de red y certificados gestionados por TIC.
+**No permitir el acceso de estudiantes a la aplicación ni activar el registro antes de validar el tratamiento de datos.** Conviene proteger rutas administrativas mediante Cloudflare Access cuando el procedimiento de autenticación lo permita.
 
-Para producción:
+Guía: [deploy/CLOUDFLARE_TUNNEL.md](deploy/CLOUDFLARE_TUNNEL.md).
 
-- \`MMG_ENV=production\`
-- \`MMG_SECURE_COOKIE=1\`
-- \`MMG_SECRET\` de al menos 48 caracteres
-- \`HOST=127.0.0.1\` y aplicación **no accesible directamente desde Internet**
-- Cloudflare Tunnel existente con ruta HTTPS al puerto local 3000; configurar reglas perimetrales y revisar Cloudflare Access para coordinación
-- Copias de seguridad cifradas, retención, permisos restrictivos y restauración probada
+## 3. Resend y configuración privada
 
-## Nuevos módulos publicados
-- Candidatura de movilidad corta, Dual-Erasmus+ y Job Shadowing con permisos por perfil y PDF de entrega.
-- Documentación privada, subida y descarga controladas, auditoría y baja administrativa de documentos.
-- Notificaciones por destinatarios con adjuntos y cola persistente de correos Resend.
-- Chat de participantes restringido a coordinación y miembros de sus grupos; supervisión administrativa auditada y comunicada.
-- Creación de grupos y asignación de alumnado o docentes acompañantes.
-- Edición de fichas y bajas, recuperación de acceso, passkeys/WebAuthn opcionales.
-- PWA inicial instalable, sin almacenamiento en caché de datos privados.
-- Aviso de privacidad versionado, aceptación electrónica de adultos y PDF de autorización firmada por representante legal para menores de 18 años. Coordinación debe aprobar el documento antes de activar cuentas.
-- Guías culturales y normativas para Portugal y Países Bajos.
+La cuenta de Coordinación dispone de **Configurar Resend**: introducir API Key, dirección remitente de un dominio verificado y URL HTTPS pública de la aplicación. La API Key se guarda cifrada en SQLite y nunca en el repositorio. Resend no sustituye la aprobación manual del coordinador.
 
-### Antes de utilizar información real
-- Revisar el modelo y la base jurídica con el responsable del tratamiento y su delegado de protección de datos; configurar los campos MMG_PRIVACY_*.
-- Completar pruebas end-to-end y de seguridad independientes, revisión de accesibilidad y controles sobre archivos subidos.
-- Configurar copias de seguridad cifradas, restauración de pruebas y políticas de conservación y eliminación.
-- Verificar dominio, DNS, Cloudflare Tunnel, Cloudflare Access en coordinación, políticas de protección y el remitente de Resend.
-- Añadir los logotipos oficiales suministrados por el centro y fotografías verificadas de cada destino.
-- Validar las autorizaciones de viaje, convivencia, prácticas y cualquier consentimiento adicional con el centro.
+El archivo principal de configuración se encuentra **solo en el servidor**:
 
-Guías detalladas: docs/PRIVACIDAD_Y_MENORES.md, deploy/CLOUDFLARE_TUNNEL.md y docs/UBUNTU.md.
+```bash
+sudo nano /etc/erasmusplus/erasmusplus.env
+sudo systemctl restart erasmusplus
+```
 
-**No emplear esta versión con datos reales del alumnado ni publicarla en Internet sin revisión técnica y legal.** El código está preparado para pruebas de Fase 1, no certificado para producción. Nunca versionar \`data/\`, \`.env\`, contraseñas, claves ni documentos personales.
+Está protegido con permisos `0600` y propietario root. El instalador mantiene por defecto `MMG_ENABLE_REGISTRATION=0` y `MMG_PRIVACY_VERSION=PENDIENTE_REVISION`. El responsable y DPD deberán aprobar los campos `MMG_PRIVACY_*` antes de permitir solicitudes reales. Usar comillas para valores de configuración que contengan espacios y no modificar `MMG_SECRET` sin plan de rotación.
+
+Para WebAuthn/passkeys, completar `MMG_PASSKEY_RPID` y `MMG_PASSKEY_ORIGIN` con el dominio público HTTPS definitivo.
+
+## 4. Actualización automática de la aplicación
+
+Se instala un timer `systemd` que **comprueba diariamente, aproximadamente a las 04:25 según la hora local del servidor**, si hay cambios en `main` de GitHub. Se añade un retraso aleatorio de hasta 15 minutos.
+
+**Por defecto no instala automáticamente versiones nuevas**, porque el proyecto sigue en desarrollo y la rama `main` no es todavía un canal de versiones certificadas. Una vez realizadas las pruebas de funcionamiento, revisión de seguridad y aprobación del procedimiento de cambios, el administrador podrá habilitar la aplicación automática:
+
+```bash
+sudo nano /etc/erasmusplus/updater.conf
+```
+
+Cambiar `MMG_AUTO_UPDATE=0` por `MMG_AUTO_UPDATE=1`. No modificar el resto de la configuración. El timer ya queda habilitado. Para ejecutar una actualización manual y supervisar el resultado:
+
+```bash
+sudo /usr/local/sbin/erasmusplus-update
+sudo systemctl status erasmusplus-update.timer --no-pager
+sudo journalctl -u erasmusplus-update.service -n 100 --no-pager
+```
+
+**Cómo se actualiza:** Git descarga el código nuevo por HTTPS; `npm ci` usa las versiones fijadas en `package-lock.json`; se verifican sintaxis y pruebas; solo después se detiene brevemente el servicio, se crea una copia de seguridad cifrada `age` de SQLite y documentos, se cambia la versión de forma atómica y se comprueba `http://127.0.0.1:3000/healthz`. Si falla el arranque o la salud, se intenta **restaurar código y datos anteriores**. Los fallos y cambios se reflejan en `journalctl`.
+
+Para impedir las actualizaciones programadas, volver a `MMG_AUTO_UPDATE=0`; para detener incluso la comprobación diaria:
+
+```bash
+sudo systemctl disable --now erasmusplus-update.timer
+```
+
+Una actualización automática toma la rama `main`; por ello es imprescindible proteger la rama, revisar las contribuciones y exigir CI satisfactorio. **No activar despliegues automáticos sobre expedientes reales mientras la aplicación no supere su auditoría de seguridad.** El actualizador no realiza actualizaciones de sistema operativo ni reinicios del servidor.
+
+## 5. Datos y copias de seguridad
+
+| Elemento | Ruta en Ubuntu |
+| --- | --- |
+| Versión activa del programa | `/opt/erasmusplus/current` |
+| Versiones del código | `/opt/erasmusplus/releases/` |
+| SQLite y documentos privados | `/var/lib/erasmusplus/` |
+| Configuración y secretos | `/etc/erasmusplus/erasmusplus.env` |
+| Clave privada para restaurar backups | `/etc/erasmusplus/backup-identity.txt` |
+| Copias cifradas anteriores a actualizaciones | `/var/backups/erasmusplus/` |
+| Configuración del actualizador | `/etc/erasmusplus/updater.conf` |
+
+Las copias creadas en cada actualización se cifran con **age** y se conservan localmente un máximo aproximado de 14 días. Esto **no sustituye** una política de backups diarios, externos y ensayos de restauración. Guardar **fuera del servidor**, de forma segura y separada, la clave privada `backup-identity.txt` y una copia de la configuración. Si se pierde la clave de recuperación no será posible descifrar las copias. Un responsable TIC deberá verificar periódicamente la restauración en un entorno aislado.
+
+## 6. Funciones existentes
+
+- Acceso por perfiles alumnado, profesorado y coordinación, verificación institucional con Resend, aprobación manual, recuperación de contraseña y passkeys opcionales.
+- Candidaturas Erasmus+ corta, Dual-Erasmus+ y Job Shadowing, PDFs privados, valoración manual y consulta de resultados.
+- Gestión de grupos, agenda de actividades y tareas con seguimiento de cada participante.
+- Notificaciones y adjuntos, chat de grupos y comunicación con coordinación, con política transparente y auditoría.
+- Compromisos de participación, documentación y autorizaciones de menores con PDF rellenable y revisión manual.
+- Destinos Portugal y Países Bajos, modalidades, normativa, panel personal adaptativo y PWA inicial.
+
+## 7. Limitaciones y obligaciones antes de producción
+
+El sistema requiere pruebas independientes de seguridad y accesibilidad, revisión de privacidad y conservación documental, controles adicionales de archivos, una política de copias y recuperación, fotografías y logotipos originales autorizados y comprobación del dominio de Resend. Ninguna prueba automatizada reemplaza estos controles. **No introducir datos personales reales hasta que la administración educativa confirme las medidas necesarias.**
+
+Documentación: [Privacidad y menores](docs/PRIVACIDAD_Y_MENORES.md) · [Cloudflare Tunnel](deploy/CLOUDFLARE_TUNNEL.md) · [Instalación técnica](docs/UBUNTU.md).
