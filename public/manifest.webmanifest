@@ -1,0 +1,9 @@
+{
+  "name": "Movilidades Erasmus+ MMG",
+  "short_name": "Erasmus MMG",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#153d6b",
+  "background_color": "#f6f9fc",
+  "icons": []
+}
