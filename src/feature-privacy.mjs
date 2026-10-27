@@ -89,7 +89,7 @@ export function noticePage(req,api){
   '<p><a target="_blank" rel="noopener noreferrer" href="https://www.aepd.es/preguntas-frecuentes/10-menores-y-educacion/FAQ-1001-cual-es-la-edad-para-que-los-menores-puedan-prestar-consentimiento-para-tratar-sus-datos-personales">AEPD: edad para consentir el tratamiento de datos de menores ↗</a></p>');
  api.layout(req,'Aviso de privacidad',body,{publicPage:!req.auth});
 }
-function guardianSession(req){
+export function guardianSession(req){
  const value=cookies(req).mmg_guardian;
  if(!value||!/^[a-f0-9]{64}$/.test(value))return null;
  const hash=crypto.createHash('sha256').update(value).digest('hex');
