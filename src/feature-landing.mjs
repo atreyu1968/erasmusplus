@@ -11,9 +11,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS landing_settings (
     id INTEGER PRIMARY KEY CHECK (id=1),
     title TEXT NOT NULL DEFAULT 'IES Manuel Martín González',
-    eyebrow TEXT NOT NULL DEFAULT 'Erasmus+ · Formación profesional',
-    hero_title TEXT NOT NULL DEFAULT 'Aprender en Europa. Crecer desde Tenerife.',
-    hero_description TEXT NOT NULL DEFAULT 'Movilidades para descubrir nuevas formas de trabajar, ampliar horizontes y llevar lo aprendido de vuelta al aula y al oficio.',
+    eyebrow TEXT NOT NULL DEFAULT 'IES Manuel Martín González · Tenerife',
+    hero_title TEXT NOT NULL DEFAULT 'Enriqueciendo vidas. Abriendo mentes.',
+    hero_description TEXT NOT NULL DEFAULT 'Conecta con Europa. Organiza tu candidatura y participa en experiencias Erasmus+ de formación profesional.',
     hero_consent_confirmed_by INTEGER REFERENCES users(id),
     hero_consent_confirmed_at TEXT,
     about_title TEXT NOT NULL DEFAULT 'La formación profesional también se construye viajando.',
@@ -34,6 +34,12 @@ db.exec(`
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
   INSERT OR IGNORE INTO landing_settings(id) VALUES (1);
+  UPDATE landing_settings SET eyebrow='IES Manuel Martín González · Tenerife'
+    WHERE id=1 AND eyebrow='Erasmus+ · Formación profesional';
+  UPDATE landing_settings SET hero_title='Enriqueciendo vidas. Abriendo mentes.'
+    WHERE id=1 AND hero_title='Aprender en Europa. Crecer desde Tenerife.';
+  UPDATE landing_settings SET hero_description='Conecta con Europa. Organiza tu candidatura y participa en experiencias Erasmus+ de formación profesional.'
+    WHERE id=1 AND hero_description='Movilidades para descubrir nuevas formas de trabajar, ampliar horizontes y llevar lo aprendido de vuelta al aula y al oficio.';
   CREATE TABLE IF NOT EXISTS landing_gallery_albums (
     id INTEGER PRIMARY KEY,
     title TEXT NOT NULL,
@@ -102,8 +108,8 @@ function validatedSettings(body) {
   if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Error('Introduce un correo de contacto válido.');
   return {
     title:escapeValue(body.title,100)||'IES Manuel Martín González',
-    eyebrow:escapeValue(body.eyebrow,120)||'Erasmus+ · Formación profesional',
-    hero_title:escapeValue(body.hero_title,160)||'Aprender en Europa. Crecer desde Tenerife.',
+    eyebrow:escapeValue(body.eyebrow,120)||'IES Manuel Martín González · Tenerife',
+    hero_title:escapeValue(body.hero_title,160)||'Enriqueciendo vidas. Abriendo mentes.',
     hero_description:escapeValue(body.hero_description,1000),
     about_title:escapeValue(body.about_title,160),
     about_text:escapeValue(body.about_text,1200),

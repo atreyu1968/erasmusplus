@@ -103,9 +103,9 @@ function renderSocial(name, value, label) {
  */
 export function renderVisitorLanding({ settings = {}, editionLabel = '', destinations = [], galleryItems = [] } = {}) {
   const title = settings.title || 'IES Manuel Martín González';
-  const eyebrow = settings.eyebrow || 'Erasmus+ · Formación profesional';
-  const heroTitle = settings.heroTitle || 'Aprender en Europa. Crecer desde Tenerife.';
-  const heroDescription = settings.heroDescription || 'Movilidades para descubrir nuevas formas de trabajar, ampliar horizontes y llevar lo aprendido de vuelta al aula y al oficio.';
+  const eyebrow = settings.eyebrow || 'IES Manuel Martín González · Tenerife';
+  const heroTitle = settings.heroTitle || 'Enriqueciendo vidas. Abriendo mentes.';
+  const heroDescription = settings.heroDescription || 'Conecta con Europa. Organiza tu candidatura y participa en experiencias Erasmus+ de formación profesional.';
   const heroImage = safeUrl(settings.heroImageUrl) ||
     'https://images.unsplash.com/photo-1555881400-74d7acaacd8b?auto=format&fit=crop&w=1500&q=85';
   const validDestinations = Array.isArray(destinations) ? destinations : [];
@@ -131,7 +131,7 @@ export function renderVisitorLanding({ settings = {}, editionLabel = '', destina
   ].filter(Boolean).join('');
 
   const heroArt =
-    '<div class="vl-hero-art"><img src="' + escapeHtml(heroImage) + '" alt="" aria-hidden="true"><span class="vl-art-label">IES MMG · Tenerife</span></div>';
+    '<div class="vl-hero-art"><img src="' + escapeHtml(heroImage) + '" alt="" aria-hidden="true"><span class="vl-art-label">IES MMG · Guía de Isora · Tenerife</span></div>';
 
   const destinationContent = validDestinations.length
     ? '<div class="vl-destination-grid">' + validDestinations.map(renderDestination).join('') + '</div>'
@@ -153,8 +153,7 @@ export function renderVisitorLanding({ settings = {}, editionLabel = '', destina
         '<p class="vl-kicker">' + escapeHtml(eyebrow) + '</p>' +
         '<h1 id="vl-title">' + escapeHtml(heroTitle) + '</h1>' +
         '<p class="vl-hero-description">' + escapeHtml(heroDescription) + '</p>' +
-        '<div class="vl-hero-meta"><span>IES Manuel Martín González</span><span>Guía de Isora · Tenerife</span></div>' +
-        '<div class="vl-actions"><a class="vl-button vl-button-primary" href="/registro">Conoce la convocatoria ' + arrow() + '</a><a class="vl-button vl-button-quiet" href="/acceso">Acceso a participantes ' + arrow() + '</a></div>' +
+         '<div class="vl-actions"><a class="vl-button vl-button-primary" href="/registro">Solicitar cuenta ' + arrow() + '</a><a class="vl-button vl-button-quiet" href="/acceso">Iniciar sesión ' + arrow(true) + '</a></div>' +
       '</div>' + heroArt +
     '</section>' +
     '<div class="vl-edition-ribbon" aria-label="Resumen de la edición">' +
