@@ -2,7 +2,7 @@
 
 Plataforma de movilidad Erasmus+ del **IES Manuel Martín González** (Guía de Isora, Tenerife).
 
-**Versión 0.1.0 — fase 1 (en desarrollo).** Backend Node.js sin dependencias externas, SQLite mediante \`node:sqlite\` y frontend adaptativo.
+**Versión 0.3.0 — versión funcional para pruebas.** Backend Node.js 24 con SQLite mediante node:sqlite, WebAuthn con SimpleWebAuthn y frontend responsive/PWA.
 
 ## Funcionalidades implementadas
 
@@ -20,7 +20,7 @@ No se emplean SMS. Las API Keys **no se incluyen en el repositorio**.
 
 ## Requisitos
 
-Ubuntu 24.04 LTS o posterior, Node.js **24 LTS** (necesario para \`node:sqlite\`) y, para producción, un subdominio institucional autorizado y HTTPS mediante Nginx.
+Ubuntu 24.04 LTS o posterior, Node.js **24 LTS**, subdominio institucional y HTTPS mediante el **Cloudflare Tunnel ya instalado**. No es necesario instalar Nginx para esta arquitectura.
 
 ## Instalar en Ubuntu (solo pruebas locales)
 
@@ -34,6 +34,7 @@ cp .env.example .env
 Configura \`.env\`, sobre todo \`MMG_SECRET\` con 48 o más caracteres aleatorios (puedes generar el valor con \`openssl rand -hex 48\`). No subas este archivo a Git.
 
 \`\`\`bash
+npm install
 npm run init-admin
 npm start
 \`\`\`
@@ -62,8 +63,8 @@ Debes **verificar el dominio remitente y sus registros DNS en el panel de Resend
 2. La aplicación guarda la cuenta como \`pending\`.
 3. Resend envía un enlace al correo \`@canariaseducacion.es\`.
 4. El usuario confirma el correo.
-5. El coordinador examina la solicitud desde **Control de cuentas**.
-6. El coordinador aprueba (solo si el correo está verificado) o desactiva.
+5. Las personas adultas registran electrónicamente la lectura del aviso; las menores de 18 años entregan un PDF firmado por su representante, que coordinación revisa en **Autorizaciones de menores**.
+6. El coordinador aprueba solo si el correo está verificado y el requisito de privacidad o autorización se ha completado.
 7. La aplicación envía un aviso de resolución mediante Resend.
 
 La pantalla **Reenviar verificación** permite pedir otro enlace si el inicial caducó o no llegó. El sistema no confirma públicamente la existencia de una cuenta.
@@ -81,14 +82,25 @@ Para producción:
 - Cloudflare Tunnel existente con ruta HTTPS al puerto local 3000; configurar reglas perimetrales y revisar Cloudflare Access para coordinación
 - Copias de seguridad cifradas, retención, permisos restrictivos y restauración probada
 
-## Funciones aún pendientes
+## Nuevos módulos publicados
+- Candidatura de movilidad corta, Dual-Erasmus+ y Job Shadowing con permisos por perfil y PDF de entrega.
+- Documentación privada, subida y descarga controladas, auditoría y baja administrativa de documentos.
+- Notificaciones por destinatarios con adjuntos y cola persistente de correos Resend.
+- Chat de participantes restringido a coordinación y miembros de sus grupos; supervisión administrativa auditada y comunicada.
+- Creación de grupos y asignación de alumnado o docentes acompañantes.
+- Edición de fichas y bajas, recuperación de acceso, passkeys/WebAuthn opcionales.
+- PWA inicial instalable, sin almacenamiento en caché de datos privados.
+- Aviso de privacidad versionado, aceptación electrónica de adultos y PDF de autorización firmada por representante legal para menores de 18 años. Coordinación debe aprobar el documento antes de activar cuentas.
+- Guías culturales y normativas para Portugal y Países Bajos.
 
-- Recuperación de contraseñas y acceso con passkeys/WebAuthn.
-- Gestión editorial de notificaciones y destinatarios.
-- Presentación real de candidaturas, PDFs con custodia inmutable y eliminación documentada.
-- Chat interno con políticas transparentes de privacidad y moderación.
-- Portal completo PWA (service worker e iconos oficiales).
-- Revisión de accesibilidad, pruebas end-to-end, backup automatizado y auditoría de seguridad.
-- Textos legales de protección de datos aprobados, política de conservación y verificación de infraestructura.
+### Antes de utilizar información real
+- Revisar el modelo y la base jurídica con el responsable del tratamiento y su delegado de protección de datos; configurar los campos MMG_PRIVACY_*.
+- Completar pruebas end-to-end y de seguridad independientes, revisión de accesibilidad y controles sobre archivos subidos.
+- Configurar copias de seguridad cifradas, restauración de pruebas y políticas de conservación y eliminación.
+- Verificar dominio, DNS, Cloudflare Tunnel, Cloudflare Access en coordinación, políticas de protección y el remitente de Resend.
+- Añadir los logotipos oficiales suministrados por el centro y fotografías verificadas de cada destino.
+- Validar las autorizaciones de viaje, convivencia, prácticas y cualquier consentimiento adicional con el centro.
+
+Guías detalladas: docs/PRIVACIDAD_Y_MENORES.md, deploy/CLOUDFLARE_TUNNEL.md y docs/UBUNTU.md.
 
 **No emplear esta versión con datos reales del alumnado ni publicarla en Internet sin revisión técnica y legal.** El código está preparado para pruebas de Fase 1, no certificado para producción. Nunca versionar \`data/\`, \`.env\`, contraseñas, claves ni documentos personales.
