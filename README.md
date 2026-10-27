@@ -12,6 +12,26 @@ El instalador bloquea deliberadamente Ubuntu **25.04**, que está fuera de sopor
 
 **[Guía de migración desde Ubuntu 25.04, con pasos para conservar Cloudflare Tunnel](docs/MIGRACION_UBUNTU_25_04.md).**
 
+## Instalación confirmada: contenedor Ubuntu 26.04 en Proxmox
+
+El contenedor Erasmus+ MMG ya dispone de **Ubuntu 26.04 LTS**, con arquitectura x86_64. **Cloudflare Tunnel está en otro contenedor Proxmox**: es normal que no exista `cloudflared.service` dentro de Ubuntu. No reinstales el túnel.
+
+Si ya tienes un clon previo en `/root/erasmusplus`:
+
+```bash
+apt-get update
+apt-get install -y ca-certificates git curl
+cd /root/erasmusplus
+git pull --ff-only
+bash deploy/install-ubuntu.sh
+```
+
+Si no existe ese repositorio, usa `git clone https://github.com/atreyu1968/erasmusplus.git` desde `/root`, entra en `erasmusplus` y ejecuta `bash deploy/install-ubuntu.sh`.
+
+Tras instalar, crea el coordinador con `/usr/local/sbin/erasmusplus-init-admin`, comprueba `curl -fsS http://127.0.0.1:3000/healthz`, configura `HOST` con la IP privada real del Ubuntu y limita TCP 3000 a la IP del contenedor Cloudflare. La ruta Cloudflare debe usar **`http://IP_PRIVADA_UBUNTU:3000`**, no `127.0.0.1`.
+
+El procedimiento y el ejemplo de cortafuegos están en [Cloudflare Tunnel en otro contenedor Proxmox](deploy/CLOUDFLARE_TUNNEL.md).
+
 ## 1. Instalación desde cero en Ubuntu, aunque no tenga Git ni cURL
 
 **Requisitos:** Ubuntu Server 22.04, 24.04 o 26.04 LTS de 64 bits (`amd64`/`arm64`), acceso administrativo `sudo`, `apt` operativo, Internet saliente por HTTPS y systemd. No se admiten versiones sin soporte estándar como Ubuntu 20.04: debe actualizarse o migrarse con el equipo TIC. El túnel **Cloudflare Tunnel ya instalado** se conserva tal como está.
@@ -21,7 +41,7 @@ Antes de instalar, comprobar versión y espacio disponible:
 ```bash
 cat /etc/os-release
 df -h
-sudo systemctl status cloudflared --no-pager
+# cloudflared funciona en otro contenedor Proxmox; no debe aparecer aquí
 ```
 
 El servidor está desactualizado: **realizar una instantánea o copia de seguridad previa** y coordinar con TIC la actualización del sistema operativo. El instalador solo ejecuta `apt-get update` e instala los paquetes necesarios; **no ejecuta silenciosamente un `dist-upgrade`, no reinicia Ubuntu y no altera el túnel existente**. Para revisar actualizaciones del sistema de manera separada:
@@ -77,13 +97,15 @@ El control de salud debe devolver `ok`. **Node solo escucha en `127.0.0.1:3000`:
 
 ## 2. Acceso mediante tu Cloudflare Tunnel existente
 
-En Cloudflare Zero Trust, selecciona el túnel ya instalado y crea una **ruta de aplicación publicada** con el subdominio institucional aprobado. El destino u origen HTTP de esa ruta será:
+En Cloudflare Zero Trust, selecciona el túnel del **otro contenedor Proxmox** y crea una **ruta de aplicación publicada** para el subdominio institucional aprobado. El destino será la dirección privada del Ubuntu Erasmus+:
 
 ```text
-http://127.0.0.1:3000
+http://IP_PRIVADA_UBUNTU:3000
 ```
 
-El usuario navegará por `https://TU-SUBDOMINIO-INSTITUCIONAL`. El dominio ilustrativo debe sustituirse por el autorizado. Cloudflare establece la conexión saliente desde `cloudflared`; no es necesario Nginx ni abrir puertos en el router. Si `cloudflared` se ejecuta en otra máquina o contenedor, hay que adaptar y proteger el tramo interno.
+Configura `HOST=IP_PRIVADA_UBUNTU` en `/etc/erasmusplus/erasmusplus.env`, reinicia el servicio y comprueba conectividad desde el contenedor donde está cloudflared. Restringe el cortafuegos del guest a la IP del contenedor cloudflared. Consulta [la guía específica de Proxmox](deploy/CLOUDFLARE_TUNNEL.md).
+
+El usuario navegará por `https://TU-SUBDOMINIO-INSTITUCIONAL`. El dominio ilustrativo debe sustituirse por el autorizado. Cloudflare establece la conexión saliente desde `cloudflared`; no es necesario Nginx ni abrir puertos en el router. En esta instalación el tráfico interno entre ambos contenedores debe quedar restringido a la red privada autorizada de Proxmox.
 
 **No permitir el acceso de estudiantes a la aplicación ni activar el registro antes de validar el tratamiento de datos.** Conviene proteger rutas administrativas mediante Cloudflare Access cuando el procedimiento de autenticación lo permita.
 
