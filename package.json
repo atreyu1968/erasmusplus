@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node src/server.mjs",
     "init-admin": "node scripts/init-admin.mjs",
+    "seed-test-accounts": "node scripts/seed-test-accounts.mjs",
     "check": "node --check src/server.mjs",
     "test": "node --test"
   },

@@ -18,6 +18,18 @@ Si el instalador llega a `Node.js 24` y después termina con `npm error EACCES` 
 
 **Corregido en GitHub:** el script ahora concede permisos de lectura y acceso a todos los archivos y subdirectorios de la copia temporal antes de ejecutar las pruebas como usuario no privilegiado `nobody`. También se ha ajustado la recuperación para que no imprima dos veces el mismo error.
 
+## Cuentas ficticias para pruebas locales
+
+El registro público permanece cerrado. Para probar los perfiles de docente y alumnado, crea una carpeta temporal vacía y ejecuta el sembrado únicamente con el entorno de desarrollo:
+
+```sh
+mkdir -p /tmp/mmg-test-accounts
+MMG_ENV=development MMG_ENABLE_REGISTRATION=0 MMG_TEST_FIXTURES=1 \
+MMG_DATA_DIR=/tmp/mmg-test-accounts npm run seed-test-accounts
+```
+
+El comando solo acepta una carpeta existente dentro del directorio temporal del sistema. Es idempotente: al repetirlo actualiza únicamente `TESTDOCENTE` y `TESTALUMNO`. Muestra sus credenciales ficticias al terminar; los correos usan el dominio reservado `.invalid`. No reutilices estas cuentas ni esta base de datos para producción o para datos personales reales. Las pruebas automatizadas ejecutan este sembrado en bases temporales y verifican acceso y permisos de ambos perfiles.
+
 Si el primer intento falló antes de arrancar la aplicación, **no borres** `/etc/erasmusplus`, `/var/lib/erasmusplus` ni las claves de respaldo. Reanuda en el mismo contenedor (si eres root puedes omitir `sudo`):
 
 ```bash
