@@ -36,12 +36,13 @@ export function cookies(req) {
   return result;
 }
 export function signedCsrf(req) {
+  if (req._signedCsrf) return req._signedCsrf;
   const raw = cookies(req).mmg_csrf || '';
   const [token,signature] = raw.split('.');
   if (token && signature && /^[a-f0-9]{48}$/.test(token) && H(token) === signature)
-    return { token };
+    return (req._signedCsrf = { token });
   const next = crypto.randomBytes(24).toString('hex');
-  return { token:next, setCookie:cookie('mmg_csrf', next + '.' + H(next), 3600) };
+  return (req._signedCsrf = { token:next, setCookie:cookie('mmg_csrf', next + '.' + H(next), 3600) });
 }
 export function authFromRequest(req) {
   const raw = cookies(req).mmg_session;
