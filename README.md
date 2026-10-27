@@ -18,17 +18,30 @@ Si el instalador llega a `Node.js 24` y después termina con `npm error EACCES` 
 
 **Corregido en GitHub:** el script ahora concede permisos de lectura y acceso a todos los archivos y subdirectorios de la copia temporal antes de ejecutar las pruebas como usuario no privilegiado `nobody`. También se ha ajustado la recuperación para que no imprima dos veces el mismo error.
 
-## Cuentas ficticias para pruebas locales
+## Cuentas y candidaturas ficticias para pruebas locales
 
 El registro público permanece cerrado. Para probar los perfiles de docente y alumnado, crea una carpeta temporal vacía y ejecuta el sembrado únicamente con el entorno de desarrollo:
 
 ```sh
-mkdir -p /tmp/mmg-test-accounts
-MMG_ENV=development MMG_ENABLE_REGISTRATION=0 MMG_TEST_FIXTURES=1 \
-MMG_DATA_DIR=/tmp/mmg-test-accounts npm run seed-test-accounts
+export MMG_DATA_DIR="$(mktemp -d /tmp/mmg-test-candidaturas.XXXXXX)"
+export MMG_ENV=development MMG_ENABLE_REGISTRATION=0 MMG_TEST_FIXTURES=1
+npm run seed-test-accounts
+npm run seed-test-candidates
 ```
 
-El comando solo acepta una carpeta existente dentro del directorio temporal del sistema. Es idempotente: al repetirlo actualiza únicamente `TESTDOCENTE` y `TESTALUMNO`. Muestra sus credenciales ficticias al terminar; los correos usan el dominio reservado `.invalid`. No reutilices estas cuentas ni esta base de datos para producción o para datos personales reales. Las pruebas automatizadas ejecutan este sembrado en bases temporales y verifican acceso y permisos de ambos perfiles.
+Los comandos solo aceptan una carpeta propia `mmg-test-*` dentro del directorio temporal del sistema y requieren desarrollo, registro cerrado y `MMG_TEST_FIXTURES=1`. El primero crea `TESTDOCENTE` y `TESTALUMNO`; el segundo añade cuatro candidaturas presentadas con sus PDF: las modalidades permitidas para cada perfil. Coordinación las revisa en `/coordinacion/candidaturas`. Para abrir la aplicación contra esa misma base, crea primero una cuenta de coordinación ficticia con `npm run init-admin`, definiendo temporalmente `MMG_ADMIN_USERNAME`, `MMG_ADMIN_EMAIL` (usa un correo `.invalid`) y `MMG_ADMIN_PASSWORD`; retira esas tres variables del entorno después del alta. Inicia la aplicación con las mismas variables `MMG_DATA_DIR`, `MMG_ENV`, `MMG_ENABLE_REGISTRATION` y `MMG_TEST_FIXTURES`.
+
+El sembrado de candidaturas es repetible: conserva los casos idénticos y sus valoraciones, y se detiene sin sobrescribir si detecta una candidatura distinta para las cuentas de prueba. Usa únicamente nombres y documentos ficticios, no envía correo y no configura Resend. En el modo `MMG_TEST_FIXTURES=1`, el formulario desmarca el aviso por defecto y el servidor no encola correos aunque se envíe explícitamente esa opción.
+
+Restricciones de seguridad: utiliza una carpeta temporal nueva, no enlaces ni copias de bases reales; mantén `MMG_ENABLE_REGISTRATION=0`; no copies datos personales ni credenciales de producción; y no apuntes `MMG_DATA_DIR` a `data/`, una base persistente ni a ningún entorno compartido. Las pruebas automatizadas verifican el rechazo de rutas no temporales, producción y registro abierto, así como la revisión de los cuatro casos y la descarga de sus PDF.
+
+Cuando termines, detén la aplicación y elimina **solo la ruta temporal que creaste** (comprueba antes el valor de `MMG_DATA_DIR`):
+
+```sh
+printf '%s\n' "$MMG_DATA_DIR"
+case "$MMG_DATA_DIR" in /tmp/mmg-test-*) rm -rf -- "$MMG_DATA_DIR" ;; *) echo "Ruta no autorizada; no se eliminó nada." >&2; exit 1 ;; esac
+unset MMG_DATA_DIR MMG_ENV MMG_ENABLE_REGISTRATION MMG_TEST_FIXTURES
+```
 
 Si el primer intento falló antes de arrancar la aplicación, **no borres** `/etc/erasmusplus`, `/var/lib/erasmusplus` ni las claves de respaldo. Reanuda en el mismo contenedor (si eres root puedes omitir `sudo`):
 

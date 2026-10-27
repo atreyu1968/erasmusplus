@@ -87,7 +87,8 @@ function detail(req,api,id,message=''){
  '<div class="fields"><label>Motivación (0–5, opcional) <input type="number" min="0" max="5" step="1" name="motivation_score" value="'+E(format(a.motivation_score).replace('—',''))+'"></label>'+
  '<label>Adecuación formativa (0–5, opcional) <input type="number" min="0" max="5" step="1" name="training_fit_score" value="'+E(format(a.training_fit_score).replace('—',''))+'"></label></div>'+
  '<label>Justificación obligatoria <textarea name="note" maxlength="2000" rows="5" required>'+E(a.review_note||'')+'</textarea></label>'+
- '<label class="checkbox"><input type="checkbox" name="notify" value="yes" checked> Avisar del nuevo estado al correo institucional mediante Resend</label>'+
+ '<label class="checkbox"><input type="checkbox" name="notify" value="yes"'+
+ (process.env.MMG_TEST_FIXTURES==='1'?'':' checked')+'> Avisar del nuevo estado al correo institucional mediante Resend</label>'+
  '<input type="hidden" name="csrf" value="'+csrf+'"><button class="btn" type="submit">Guardar valoración</button></form>';
  }
  html+=panel('Historial de decisiones',history.length?
@@ -112,6 +113,7 @@ function save(req,api,id,b){
   detail(req,api,id,'Selecciona un estado, justifica la decisión (mínimo 15 caracteres) y revisa las puntuaciones.');return;
  }
  // One transaction for the current result and immutable review history.
+ const notificationQueued=b.notify==='yes'&&process.env.MMG_TEST_FIXTURES!=='1';
  db.exec('BEGIN IMMEDIATE');
  try {
   run("INSERT INTO application_reviews(application_id,decision,motivation_score,training_fit_score,review_note,reviewed_by) "+
@@ -121,7 +123,7 @@ function save(req,api,id,b){
   run("INSERT INTO application_review_history(application_id,decision,review_note,actor_id,motivation_score,training_fit_score) VALUES (?,?,?,?,?,?)",
    id,decision,note,req.auth.user.id,motivation,fit);
   audit(req.auth.user.id,'application_review_'+decision,id);
-  if(b.notify==='yes'){
+  if(notificationQueued){
    queueMail(a.institutional_email,'Actualización de candidatura · Erasmus+ MMG',
     'Hola '+a.first_name+'.\n\nTu candidatura Erasmus+ MMG ha cambiado al estado: '+labels[decision]+
     '.\n\nConsulta tu cuenta y, si necesitas aclaraciones, utiliza el chat con Coordinación. '+
@@ -129,7 +131,7 @@ function save(req,api,id,b){
   }
   db.exec('COMMIT');
  }catch(e){db.exec('ROLLBACK');throw e;}
- detail(req,api,id,'La valoración se ha guardado con trazabilidad'+(b.notify==='yes'?' y el aviso está en cola de envío.':'.'));
+ detail(req,api,id,'La valoración se ha guardado con trazabilidad'+(notificationQueued?' y el aviso está en cola de envío.':'.'));
 }
 function csv(req,api){
  const rows=all("SELECT a.id,a.mobility,a.family,a.destination,a.status,a.submitted_at,u.first_name,u.last_name,u.role,r.decision,r.motivation_score,r.training_fit_score "+

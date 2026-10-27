@@ -11,6 +11,7 @@ const base='http://127.0.0.1:'+port;
 const env={...process.env,MMG_DATA_DIR:data,HOST:'127.0.0.1',PORT:String(port),
  MMG_ENV:'development',MMG_SECURE_COOKIE:'0',
  MMG_SECRET:'dev-test-secret-longer-than-48-characters---0123456789-ABCDEF',
+  MMG_TEST_FIXTURES:'1',
  MMG_ENABLE_REGISTRATION:'0',MMG_PRIVACY_VERSION:'PENDIENTE_REVISION',
  MMG_ADMIN_USERNAME:'TESTADMIN',MMG_ADMIN_PASSWORD:'UnaFraseDePruebaRealmenteLarga2026!',
  MMG_ADMIN_EMAIL:'coordinacion@example.edu'};
@@ -45,6 +46,29 @@ test('MVP: creación del coordinador y controles básicos',async ()=>{
    assert.match(fixtures.stdout,/TESTDOCENTE/);
    assert.match(fixtures.stdout,/TESTALUMNO/);
   }
+   const candidateFixtures=spawnSync(process.execPath,['scripts/seed-test-candidates.mjs'],{
+    env:fixtureEnv,encoding:'utf8',timeout:20000
+   });
+   assert.equal(candidateFixtures.status,0,candidateFixtures.stderr);
+   assert.match(candidateFixtures.stdout,/alumnado/);
+   assert.match(candidateFixtures.stdout,/docente/);
+   const repeatedCandidates=spawnSync(process.execPath,['scripts/seed-test-candidates.mjs'],{
+    env:fixtureEnv,encoding:'utf8',timeout:20000
+   });
+   assert.equal(repeatedCandidates.status,0,repeatedCandidates.stderr);
+   assert.match(repeatedCandidates.stdout,/conservada/);
+   const unsafeCandidates=spawnSync(process.execPath,['scripts/seed-test-candidates.mjs'],{
+    env:{...fixtureEnv,MMG_DATA_DIR:path.resolve('data')},encoding:'utf8',timeout:20000
+   });
+   assert.notEqual(unsafeCandidates.status,0);
+   const openRegistrationCandidates=spawnSync(process.execPath,['scripts/seed-test-candidates.mjs'],{
+    env:{...fixtureEnv,MMG_ENABLE_REGISTRATION:'1'},encoding:'utf8',timeout:20000
+   });
+   assert.notEqual(openRegistrationCandidates.status,0);
+   const productionCandidates=spawnSync(process.execPath,['scripts/seed-test-candidates.mjs'],{
+    env:{...fixtureEnv,MMG_ENV:'production'},encoding:'utf8',timeout:20000
+   });
+   assert.notEqual(productionCandidates.status,0);
   child=spawn(process.execPath,['src/server.mjs'],{env,stdio:['ignore','pipe','pipe']});
   let stderr='';
   child.stderr.on('data',x=>stderr+=x);
@@ -77,6 +101,59 @@ test('MVP: creación del coordinador y controles básicos',async ()=>{
   assert.equal(r.status,200);
   html=await r.text();
   assert.match(html,/Panel de coordinación/);
+   r=await fetch(base+'/coordinacion/candidaturas',{headers:{cookie:session}});
+   assert.equal(r.status,200);
+   html=await r.text();
+   assert.match(html,/Docente Prueba/);
+   assert.match(html,/Alumnado Prueba/);
+   const candidateIds=[...html.matchAll(/href="\/coordinacion\/candidaturas\/(\d+)">Revisar expediente/g)]
+    .map(match=>match[1]);
+   assert.equal(candidateIds.length,4,'dos modalidades por perfil aparecen en coordinación');
+   for(const candidateId of candidateIds){
+    r=await fetch(base+'/coordinacion/candidaturas/'+candidateId,{headers:{cookie:session}});
+    assert.equal(r.status,200);
+    const detail=await r.text();
+    assert.match(detail,/CASO FICTICIO/);
+    assert.match(detail,/Presentada · pendiente/);
+    const pdfPath='/documentacion/pdf/candidatura/'+candidateId;
+    assert.ok(detail.includes('href="'+pdfPath+'"'));
+    r=await fetch(base+pdfPath,{headers:{cookie:session}});
+    assert.equal(r.status,200);
+    assert.match(r.headers.get('content-type'),/application\/pdf/);
+    assert.ok(Buffer.from(await r.arrayBuffer()).toString('latin1',0,8).startsWith('%PDF-1.4'));
+   }
+   const reviewedId=candidateIds[0];
+   r=await fetch(base+'/coordinacion/candidaturas/'+reviewedId,{headers:{cookie:session}});
+   html=await r.text();
+   assert.doesNotMatch(html,/name="notify" value="yes" checked/);
+   const reviewCsrf=html.match(/name="csrf" value="([a-f0-9]+)"/)?.[1];
+   assert.ok(reviewCsrf);
+   r=await fetch(base+'/coordinacion/candidaturas/'+reviewedId,{
+    method:'POST',redirect:'manual',headers:{cookie:session,'content-type':'application/x-www-form-urlencoded'},
+    body:new URLSearchParams({
+     csrf:reviewCsrf,decision:'selected',motivation_score:'4',training_fit_score:'5',
+     note:'Valoración ficticia para comprobar que el sembrado conserva las decisiones.',
+     notify:'yes'
+    })
+   });
+   assert.equal(r.status,200);
+   const reviewedResponse=await r.text();
+   assert.match(reviewedResponse,/La valoración se ha guardado/);
+   assert.doesNotMatch(reviewedResponse,/aviso está en cola de envío/);
+   const queuedMail=spawnSync(process.execPath,['--input-type=module','-e',
+    "import {get} from './src/db.mjs'; console.log(get('SELECT COUNT(*) AS count FROM outbox').count);"
+   ],{env,encoding:'utf8',timeout:20000});
+   assert.equal(queuedMail.status,0,queuedMail.stderr);
+   assert.equal(queuedMail.stdout.trim(),'0','el modo de fixtures no encola avisos');
+   const repeatAfterReview=spawnSync(process.execPath,['scripts/seed-test-candidates.mjs'],{
+    env:fixtureEnv,encoding:'utf8',timeout:20000
+   });
+   assert.equal(repeatAfterReview.status,0,repeatAfterReview.stderr);
+   assert.match(repeatAfterReview.stdout,/conservada/);
+   r=await fetch(base+'/coordinacion/candidaturas/'+reviewedId,{headers:{cookie:session}});
+   const preservedReview=await r.text();
+   assert.match(preservedReview,/Seleccionada/);
+   assert.match(preservedReview,/Valoración ficticia para comprobar que el sembrado conserva las decisiones/);
   r=await fetch(base+'/coordinacion/grupos',{headers:{cookie:session}});
   assert.equal(r.status,200);
   assert.match(await r.text(),/Gestión de grupos/);
