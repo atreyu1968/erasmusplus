@@ -37,10 +37,10 @@ function allowed(u,mobility,family,destination){
  return true;
 }
 function listApps(u,csrf){
- const rows=all('SELECT * FROM applications WHERE user_id=? ORDER BY created_at DESC',u.id);
+ const rows=all("SELECT a.*,r.decision AS review_decision FROM applications a LEFT JOIN application_reviews r ON r.application_id=a.id WHERE a.user_id=? ORDER BY a.created_at DESC",u.id);
  return panel('Mis candidaturas',
  rows.length?datatable(['Modalidad','Destino','Estado','Documento'],rows.map(a=>
- '<tr><td>'+E(modeName[a.mobility])+'</td><td>'+E(a.destination)+'</td><td>'+E(a.status==='submitted'?'Presentada':'Borrador')+'</td><td>'+
+ '<tr><td>'+E(modeName[a.mobility])+'</td><td>'+E(a.destination)+'</td><td>'+E(a.status==='draft'?'Borrador':({in_review:'En valoración',shortlisted:'Preseleccionada',selected:'Seleccionada',reserve:'En lista de reserva',not_selected:'No seleccionada'})[a.review_decision]||'Presentada · pendiente')+'</td><td>'+
  (a.status==='submitted'?'<a href="/documentacion/pdf/candidatura/'+a.id+'">Descargar PDF</a>':'Puedes presentar el borrador con el formulario')+
  '</td></tr>')):'<p>No tienes candidaturas guardadas.</p>');
 }
