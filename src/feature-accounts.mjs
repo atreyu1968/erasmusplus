@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 import { get,run,audit,all } from './db.mjs';
 import { hashPassword } from './auth.mjs';
-import { sendMail,publicUrl } from './mailer.mjs';
-import {escape as E,clean,heading,panel,input,formEnd,validId,schoolFamilies,select } from './feature-service.mjs';
+import { sendMail,publicUrl,settings } from './mailer.mjs';
+import {escape as E,clean,heading,panel,input,formEnd,validId,schoolFamilies,select,queueMail } from './feature-service.mjs';
 
 function userPage(req,api,notice=''){
  const u=req.auth.user;
@@ -139,9 +139,54 @@ async function reset(req,api,b){
  api.layout(req,'Contraseña actualizada',panel('Contraseña actualizada',
  '<p>Ya puedes iniciar sesión con la nueva contraseña.</p><a class="btn" href="/acceso">Ir al acceso</a>'),{publicPage:true});
 }
+
+function createAccountPage(req,api,notice=''){
+ if(!api.mustAdmin(req))return;
+ let html=heading('COORDINACIÓN','Añadir cuenta manualmente','Una cuenta añadida por coordinación también debe confirmar su correo institucional y pasar la validación.');
+ if(notice)html+=panel('Resultado',E(notice));
+ html+='<form method="post" action="/coordinacion/crear-cuenta" class="card form">'+
+ '<label>Perfil'+select('role',['teacher','student'])+'</label>'+
+ '<label>Nombre'+input('first_name')+'</label>'+
+ '<label>Apellidos'+input('last_name')+'</label>'+
+ '<label>DNI docente'+input('dni')+'</label>'+
+ '<label>CIAL alumnado'+input('cial')+'</label>'+
+ '<label>Correo institucional'+input('institutional_email','','email')+'</label>'+
+ '<label>Teléfono'+input('phone','','tel')+'</label>'+
+ '<label>Centro'+input('center','IES Manuel Martín González')+'</label>'+
+ '<label>Familia profesional'+select('professional_family',schoolFamilies)+'</label>'+
+ '<p>El usuario establecerá su contraseña mediante la recuperación de acceso, después de verificar su correo.</p>'+
+ formEnd(api.csrf(req),'Crear cuenta pendiente');
+ api.layout(req,'Añadir cuenta',html);
+}
+function createAccount(req,api,b){
+ const role=clean(b.role),first=clean(b.first_name,100),last=clean(b.last_name,150),
+  email=clean(b.institutional_email,200).toLowerCase(),dni=clean(b.dni,30).toUpperCase(),cial=clean(b.cial,30).toUpperCase(),
+  username=role==='teacher'?dni:cial;
+ if(!['teacher','student'].includes(role)||!first||!last||!username||!email.endsWith('@canariaseducacion.es')||
+  process.env.MMG_PRIVACY_VERSION==='PENDIENTE_REVISION'||!settings().configured){
+  createAccountPage(req,api,'La cuenta exige datos válidos, privacidad aprobada y Resend configurado.');return;
+ }
+ if(get('SELECT id FROM users WHERE username=? OR institutional_email=?',username,email)){
+  createAccountPage(req,api,'Ya hay una cuenta con ese identificador o correo.');return;
+ }
+ const id=Number(run("INSERT INTO users(role,username,pass_hash,first_name,last_name,dni,cial,phone,institutional_email,center,professional_family,privacy_version,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'pending')",
+  role,username,'disabled-'+crypto.randomBytes(30).toString('hex'),first,last,dni,cial,clean(b.phone,45),email,
+  clean(b.center,200),schoolFamilies.includes(b.professional_family)?b.professional_family:null,
+  process.env.MMG_PRIVACY_VERSION).lastInsertRowid);
+ const token=crypto.randomBytes(32).toString('hex');
+ run('INSERT INTO verification_tokens(token_hash,user_id,expires_at) VALUES (?,?,?)',
+  crypto.createHash('sha256').update(token).digest('hex'),id,Date.now()+24*3600*1000);
+ queueMail(email,'Confirma tu alta en Movilidades Erasmus+ MMG',
+  'Coordinación ha creado una solicitud de cuenta Erasmus+ MMG. Confirma el correo desde este enlace (24 horas): '+
+  publicUrl()+'/verificar?token='+token+
+  '\nCuando lo hayas confirmado, utiliza Recuperar acceso para crear tu contraseña. Coordinación deberá aprobar la cuenta.');
+ audit(req.auth.user.id,'admin_account_created',id);
+ createAccountPage(req,api,'Cuenta creada. El correo de verificación se ha incorporado a la cola de Resend.');
+}
+
 export async function accountRoutes(req,url,method,api){
  const edit=/^\/coordinacion\/editar\/(\d+)$/.exec(url),anon=/^\/coordinacion\/anonimizar\/(\d+)$/.exec(url);
- if(!['/perfil','/recuperar','/restablecer'].includes(url)&&!edit&&!anon)return false;
+ if(!['/perfil','/recuperar','/restablecer','/coordinacion/crear-cuenta'].includes(url)&&!edit&&!anon)return false;
  if(url==='/recuperar'){
   if(method==='GET')recoverPage(req,api);else {const b=await api.readForm(req);if(api.requireCSRF(req,b))await recover(req,api,b);}
   return true;
@@ -152,6 +197,12 @@ export async function accountRoutes(req,url,method,api){
   return true;
  }
  if(!api.mustLogin(req))return true;
+ if(url==='/coordinacion/crear-cuenta'){
+  if(!api.mustAdmin(req))return true;
+  if(method==='GET')createAccountPage(req,api);
+  else {const b=await api.readForm(req);if(api.requireCSRF(req,b))createAccount(req,api,b);}
+  return true;
+ }
  if(url==='/perfil'){
   if(method==='GET')userPage(req,api);
   else {const b=await api.readForm(req);if(api.requireCSRF(req,b))updateProfile(req,b,api);}
