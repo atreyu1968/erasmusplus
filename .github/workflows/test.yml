@@ -34,3 +34,16 @@ jobs:
           node --check src/feature-accounts.mjs
       - name: Ejecutar pruebas
         run: npm test
+      - name: Ensayar instalación con permisos root restrictivos
+        run: |
+          sudo bash <<'SCRIPT'
+          set -Eeuo pipefail
+          umask 077
+          stage=$(mktemp -d /tmp/mmg-release-test.XXXXXXXX)
+          trap 'rm -rf -- "$stage"' EXIT
+          cp -a package.json package-lock.json src scripts public tests node_modules "$stage/"
+          chmod -R a+rX "$stage"
+          chmod -R go-w "$stage"
+          cd "$stage"
+          runuser -u nobody -- env HOME=/tmp npm_config_cache=/tmp/mmg-npm-test-cache npm test
+          SCRIPT
