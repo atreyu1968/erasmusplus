@@ -138,6 +138,17 @@ test('Valoración manual y agenda: seguridad por perfil, grupo y CSRF',async()=>
   const disallowed=await post('/agenda/tarea/1/completar',other,
      (await page('/panel',other))[1].match(/name="csrf" value="([a-f0-9]+)"/)?.[1]||'none');
   assert.equal(disallowed.status===403||disallowed.status===404,true);
+   const unassignedCsrf=(await page('/panel',unassignedTeacher))[1]
+    .match(/name="csrf" value="([a-f0-9]+)"/)?.[1];
+   assert.ok(unassignedCsrf);
+   const unassignedCompletion=await post('/agenda/tarea/1/completar',unassignedTeacher,unassignedCsrf);
+   assert.equal(unassignedCompletion.status,404);
+   const completionCheck=spawnSync(process.execPath,['--input-type=module','-e',
+    "import {get} from './src/db.mjs';"+
+    "console.log(get(\"SELECT COUNT(*) AS n FROM mobility_task_completions c JOIN users u ON u.id=c.user_id WHERE u.username='DOCNOASIGNADO'\").n);"
+   ],{env,encoding:'utf8',timeout:20000});
+   assert.equal(completionCheck.status,0,completionCheck.stderr);
+   assert.equal(completionCheck.stdout.trim(),'0');
   const coordinatorCompletion=await post('/agenda/tarea/1/completar',admin,csrf);
   assert.equal(coordinatorCompletion.status,403);
   assert.match(await coordinatorCompletion.text(),/no completa tareas en nombre de participantes/i);
