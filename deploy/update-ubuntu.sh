@@ -13,7 +13,21 @@ IDENTITY=/etc/erasmusplus/backup-identity.txt
 RECIPIENTS=/etc/erasmusplus/backup-recipient.txt
 SETTINGS=/etc/erasmusplus/updater.conf
 REPO=https://github.com/atreyu1968/erasmusplus.git
-HEALTH=http://127.0.0.1:3000/healthz
+# The origin can run in a separate Proxmox guest from cloudflared.
+# Read the actual bind address to avoid a false failed-update/rollback.
+APP_ENV=/etc/erasmusplus/erasmusplus.env
+[[ -f "$APP_ENV" ]] || { echo 'Falta archivo del servicio: /etc/erasmusplus/erasmusplus.env' >&2; exit 1; }
+BIND_HOST=$(sed -n 's/^HOST=//p' "$APP_ENV" | head -n 1)
+BIND_PORT=$(sed -n 's/^PORT=//p' "$APP_ENV" | head -n 1)
+BIND_HOST=${BIND_HOST:-127.0.0.1}
+BIND_PORT=${BIND_PORT:-3000}
+[[ "$BIND_HOST" =~ ^[0-9]{1,3}(\\.[0-9]{1,3}){3}$ ]] || {
+  echo 'HOST debe ser una IPv4 privada o 127.0.0.1 para la comprobación de salud.' >&2
+  exit 1
+}
+[[ "$BIND_PORT" =~ ^[0-9]{1,5}$ ]] || { echo 'PORT no válido en configuración.' >&2; exit 1; }
+[[ "$BIND_HOST" == 0.0.0.0 ]] && BIND_HOST=127.0.0.1
+HEALTH="http://$BIND_HOST:$BIND_PORT/healthz"
 STAGE=
 BACKUP=
 PREVIOUS=
