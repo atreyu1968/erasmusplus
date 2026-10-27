@@ -32,7 +32,7 @@ function field(label,name,{type='text',required=false,placeholder='',value='',ex
 function postButton(label,action,token,extras='') {
   return '<form method="post" action="'+action+'"><input type="hidden" name="csrf" value="'+X(token)+'">'+extras+'<button class="btn small" type="submit">'+X(label)+'</button></form>';
 }
-const nav=[['/panel','⌂','Inicio'],['/candidatura','▤','Candidatura Erasmus'],['/destinos','⌖','Destinos Erasmus'],['/movilidades','✈','Tipos de movilidad'],['/normativa','§','Normativa Erasmus'],['/compromisos','✓','Compromisos'],['/notificaciones','♧','Notificaciones'],['/documentos','▣','Documentación'],['/chat','✉','Chat interno'],['/perfil','♙','Mi perfil'],['/passkeys','◎','Acceso biométrico']];
+const nav=[['/panel','⌂','Inicio'],['/candidatura','▤','Candidatura Erasmus'],['/agenda','▦','Agenda y tareas'],['/destinos','⌖','Destinos Erasmus'],['/movilidades','✈','Tipos de movilidad'],['/normativa','§','Normativa Erasmus'],['/compromisos','✓','Compromisos'],['/notificaciones','♧','Notificaciones'],['/documentos','▣','Documentación'],['/chat','✉','Chat interno'],['/perfil','♙','Mi perfil'],['/passkeys','◎','Acceso biométrico']];
 function layout(req,title,main,{publicPage=false,status=200}={}){
   const user=req.auth?.user;
   const current=req.url.split('?')[0];
