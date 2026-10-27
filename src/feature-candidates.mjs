@@ -1,6 +1,11 @@
 import { db,get,all,run,audit } from './db.mjs';
 import { escape as E,clean,validId,schoolFamilies,destinations,select,input,formEnd,panel,heading,datatable,paper,safeDocument,deleteDocument,storeUpload,multipart,attachment,readAttachment,isAdmin } from './feature-service.mjs';
 
+db.exec("CREATE TABLE IF NOT EXISTS document_deletion_log ("+
+ "id INTEGER PRIMARY KEY,document_kind TEXT NOT NULL,document_id INTEGER NOT NULL,"+
+ "reason TEXT NOT NULL,actor_id INTEGER NOT NULL REFERENCES users(id),"+
+ "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);");
+
 const familyDest={
  'Imagen personal':['Viseu','Róterdam'],
  'Transporte y mantenimiento de vehículos':['Viseu'],
@@ -151,7 +156,8 @@ function adminDocs(req,api,notice=''){
  const csrf=E(api.csrf(req));
  const deleteForm=(kind,id)=>'<form method="post" action="/coordinacion/documentos/borrar">'+
  '<input type="hidden" name="csrf" value="'+csrf+'"><input type="hidden" name="kind" value="'+kind+'"><input type="hidden" name="id" value="'+id+'">'+
- '<label class="checkbox"><input type="checkbox" name="confirm" value="yes" required> Confirmar baja</label><button class="btn small">Borrar con auditoría</button></form>';
+ '<label>Justificación de la baja <input name="reason" minlength="15" maxlength="400" required placeholder="Motivo documentado"></label>'+
+ '<label class="checkbox"><input type="checkbox" name="confirm" value="yes" required> He comprobado que procede la supresión del expediente</label><button class="btn small">Dar de baja</button></form>';
  let out=heading('ARCHIVO ADMINISTRATIVO','Documentación Erasmus','Documentos privados de ejecución, PDFs inmutables y archivos adjuntos.');
  if(notice)out+=panel('Resultado',E(notice));
  out+=panel('Fichas de candidatura',datatable(['Participante','Movilidad','Documento','Eliminar'],docs.map(a=>
@@ -223,9 +229,9 @@ export async function candidateRoutes(req,url,method,api){
   if(!api.mustAdmin(req))return true;
   const b=await api.readForm(req);
   if(!api.requireCSRF(req,b))return true;
-  const kind=String(b.kind||''),id=validId(b.id);
-  if(b.confirm!=='yes'||!id||!['application','commitment','file'].includes(kind)){
-    adminDocs(req,api,'Borrado cancelado: confirma el documento y la acción.');return true;
+  const kind=String(b.kind||''),id=validId(b.id),reason=clean(b.reason,400);
+  if(b.confirm!=='yes'||!id||reason.length<15||!['application','commitment','file'].includes(kind)){
+    adminDocs(req,api,'Baja cancelada: justifica la supresión con al menos 15 caracteres y confírmala.');return true;
   }
   try {
    if(kind==='application'){
@@ -248,8 +254,9 @@ export async function candidateRoutes(req,url,method,api){
       try{unlinkSync(join(docsDir,row.stored_name));}catch(e){if(e.code!=='ENOENT')throw e;}
     }
    }
+   run('INSERT INTO document_deletion_log(document_kind,document_id,reason,actor_id) VALUES (?,?,?,?)',kind,id,reason,u.id);
    audit(u.id,'admin_document_deleted_'+kind,id);
-   adminDocs(req,api,'Documento eliminado del archivo y baja registrada en auditoría.');
+   adminDocs(req,api,'Documento eliminado; la justificación se ha conservado en el registro administrativo.');
   } catch(e){adminDocs(req,api,e.message);}
   return true;
  }
