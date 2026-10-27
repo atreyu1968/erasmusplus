@@ -33,16 +33,41 @@ function postButton(label,action,token,extras='') {
   return '<form method="post" action="'+action+'"><input type="hidden" name="csrf" value="'+X(token)+'">'+extras+'<button class="btn small" type="submit">'+X(label)+'</button></form>';
 }
 const nav=[['/panel','⌂','Inicio'],['/candidatura','▤','Candidatura Erasmus'],['/agenda','▦','Agenda y tareas'],['/destinos','⌖','Destinos Erasmus'],['/movilidades','✈','Tipos de movilidad'],['/normativa','§','Normativa Erasmus'],['/compromisos','✓','Compromisos'],['/notificaciones','♧','Notificaciones'],['/documentos','▣','Documentación'],['/chat','✉','Chat interno'],['/perfil','♙','Mi perfil'],['/passkeys','◎','Acceso biométrico']];
+const navIconPaths={
+  '⌂':'M3 10.5 12 3l9 7.5M5.5 9.5V21h13V9.5M9 21v-7h6v7',
+  '⇥':'M10 17l5-5-5-5m5 5H3m11-9h6a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-6',
+  '▤':'M7 3h10l4 4v14H3V3h4Zm0 0v5h10V3M7 13h10M7 17h7',
+  '▦':'M4 5h16v16H4zM8 3v4m8-4v4M4 10h16m-11 4h2m3 0h2m-7 3h2',
+  '⌖':'M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Zm-5 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
+  '✈':'m3 12 18-8-7 18-3-7-8-3Zm8 3 5-5',
+  '§':'M6 3h12v18H6zM9 8h6m-6 4h6m-6 4h4',
+  '✓':'m5 12 4 4L19 6',
+  '♧':'M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12h4',
+  '▣':'M3 6h7l2 2h9v11H3z',
+  '✉':'M4 5h16v12H9l-5 4zM8 9h8m-8 4h6',
+  '♙':'M20 21a8 8 0 0 0-16 0m12-13a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
+  '◎':'M12 3a9 9 0 1 0 9 9m-9-4v5l4 2m3-11h4m-2-2v4',
+  '＋':'M12 5v14m-7-7h14',
+  '⚙':'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0-5v2m0 14v2m9-9h-2M5 12H3m15.36-6.36-1.42 1.42M7.06 16.94l-1.42 1.42m12.72 0-1.42-1.42M7.06 7.06 5.64 5.64'
+};
+function iconMarkup(icon){
+  const path=navIconPaths[icon];
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+(path||navIconPaths['▤'])+'"/></svg>';
+}
 function layout(req,title,main,{publicPage=false,status=200}={}){
   const user=req.auth?.user;
   const current=req.url.split('?')[0];
   const links=publicPage?[['/','⌂','Inicio'],['/acceso','⇥','Acceso'],['/registro','♙','Registro'],['/privacidad','§','Privacidad']]:
     [...nav,...(user?.role==='coordinator'?[['/coordinacion','▦','Control de cuentas'],['/coordinacion/candidaturas','▤','Candidaturas recibidas'],['/coordinacion/documentos','▣','Archivo documental'],['/coordinacion/grupos','♙','Grupos de movilidad'],['/coordinacion/chat','✉','Supervisión de chat'],['/coordinacion/privacidad','✓','Autorizaciones de menores'],['/coordinacion/crear-cuenta','＋','Crear cuenta'],['/coordinacion/configuracion','⚙','Configurar Resend']]:[])];
-  const sidebar=links.map(([href,icon,name])=>'<a class="nav'+(href===current?' current':'')+'" href="'+href+'"><i>'+icon+'</i>'+X(name)+'</a>').join('');
+  const sidebar=links.map(([href,icon,name],index)=>
+    (user?.role==='coordinator'&&index===nav.length?'<span class="nav-divider">COORDINACIÓN</span>':'')+
+    '<a class="nav'+(href===current?' current':'')+'" href="'+href+'" title="'+X(name)+'" aria-label="'+X(name)+'"><i aria-hidden="true">'+iconMarkup(icon)+'</i><span class="nav-label">'+X(name)+'</span></a>'
+  ).join('');
   const sessionActions=user?postButton('Cerrar sesión','/salir',csrf(req)):'<a class="btn small" href="/acceso">Acceder</a>';
   const page='<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#143e71"><title>'+X(title)+' · Erasmus+ MMG</title><link rel="stylesheet" href="/styles.css"><link rel="manifest" href="/manifest.webmanifest"></head><body>'+
-  '<div class="shell"><aside><a class="brand" href="/"><span class="mark">MMG+</span><span><b>Movilidades Erasmus+</b><small>IES Manuel Martín González</small></span></a><p class="side-label">GUÍA DE ISORA · TENERIFE</p><nav>'+sidebar+'</nav><div class="sidefooter">Enriqueciendo vidas.<br>Abriendo mentes.</div></aside>'+
-  '<div class="workspace"><header class="topbar"><span>CURSO 2026–2027</span><div class="user"><span class="avatar">'+X((user?.first_name||'E').slice(0,1))+'</span>'+X(user?.first_name||'Visitante')+sessionActions+'</div></header><main>'+main+'<footer>Movilidades Erasmus+ MMG · Fase 1 de desarrollo. No introducir datos reales hasta concluir la revisión de seguridad y protección de datos.</footer></main></div></div></body></html>';
+  '<div class="shell"><header class="topbar"><a class="brand" href="/"><span class="mark">MMG+</span><span class="brand-copy"><b>Movilidades Erasmus+</b><small>IES Manuel Martín González</small></span></a><span class="course-label">CURSO 2026–2027</span><div class="user"><span class="avatar">'+X((user?.first_name||'E').slice(0,1))+'</span><span class="user-name">'+X(user?.first_name||'Visitante')+'</span>'+sessionActions+'</div></header>'+
+  '<aside class="sidebar" aria-label="Navegación principal"><p class="side-label">GUÍA DE ISORA · TENERIFE</p><nav>'+sidebar+'</nav><div class="sidefooter">Enriqueciendo vidas.<br>Abriendo mentes.</div></aside>'+
+  '<div class="workspace"><main>'+main+'<footer>Movilidades Erasmus+ MMG · Fase 1 de desarrollo. No introducir datos reales hasta concluir la revisión de seguridad y protección de datos.</footer></main></div></div></body></html>';
   const cookieResult=csrfToken(req);
   send(req,status,page,cookieResult.setCookie?{'Set-Cookie':cookieResult.setCookie}:{});
 }
