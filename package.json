@@ -1,6 +1,6 @@
 {
   "name": "movilidades-erasmus-mmg",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Plataforma Erasmus+ MMG en Node.js + SQLite",
@@ -12,5 +12,8 @@
     "init-admin": "node scripts/init-admin.mjs",
     "check": "node --check src/server.mjs",
     "test": "node --test"
+  },
+  "dependencies": {
+    "@simplewebauthn/server": "^13.3.3"
   }
 }
