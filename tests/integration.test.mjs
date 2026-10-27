@@ -76,6 +76,22 @@ test('MVP: creación del coordinador y controles básicos',async ()=>{
   let r=await fetch(base+'/healthz');
   assert.equal(r.status,200);
   assert.equal(await r.text(),'ok');
+  r=await fetch(base+'/');
+  assert.equal(r.status,200,'la portada pública responde correctamente');
+  assert.match(r.headers.get('content-type')||'',/text\/html/);
+  let homepage=await r.text();
+  assert.equal((homepage.match(/<article class="visitor-destination">/g)||[]).length,3,
+   'la portada publica los tres destinos previstos');
+  for(const destination of ['Viseu','Oporto','Róterdam']){
+   assert.ok(homepage.includes('<h3>'+destination+'</h3>'),`la portada publica ${destination}`);
+  }
+  for(const [label,route] of [
+   ['registro','/registro'],['acceso','/acceso'],['privacidad','/privacidad']
+  ]){
+   assert.ok(homepage.includes('href="'+route+'"'),`la portada enlaza con ${label}`);
+   const publicPage=await fetch(base+route);
+   assert.equal(publicPage.status,200,`el destino ${route} responde correctamente`);
+  }
   r=await fetch(base+'/coordinacion',{redirect:'manual'});
   assert.equal(r.status,303);
   assert.equal(r.headers.get('location'),'/acceso');
