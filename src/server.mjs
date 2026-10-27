@@ -17,7 +17,7 @@ const header=(req,status,contentType='text/html; charset=utf-8',more={})=>{
   const h={
     'Content-Type':contentType,'Cache-Control':'no-store',
     'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY',
-    'Referrer-Policy':'strict-origin-when-cross-origin',
+    'Referrer-Policy':'no-referrer',
     'Content-Security-Policy':"default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
     ...more
   };
