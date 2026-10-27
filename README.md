@@ -4,6 +4,14 @@ Aplicación de gestión Erasmus+ del **IES Manuel Martín González (Guía de Is
 
 > **Estado:** versión de desarrollo para pruebas con datos ficticios. No abrir registros de alumnado real sin revisión técnica, autorización del centro y validación de protección de datos. El instalador deja el registro cerrado y las actualizaciones automáticas sin aplicar hasta su autorización.
 
+## Si el instalador detecta Ubuntu 25.04
+
+El instalador bloquea deliberadamente Ubuntu **25.04**, que está fuera de soporte de seguridad desde el **15 de enero de 2026**. No es un error de instalación ni se soluciona ignorando la versión. Ubuntu 25.10 también ha agotado su soporte (9 de julio de 2026).
+
+**Solución recomendada:** preparar Ubuntu Server **26.04 LTS**, migrar con seguridad el Cloudflare Tunnel y los servicios del equipo y, después, instalar Erasmus+ MMG con los comandos de la sección siguiente. Si no es posible reinstalar, el camino secuencial 25.04 → 25.10 → 26.04 debe realizarse con respaldo, consola de recuperación y supervisión de TIC.
+
+**[Guía de migración desde Ubuntu 25.04, con pasos para conservar Cloudflare Tunnel](docs/MIGRACION_UBUNTU_25_04.md).**
+
 ## 1. Instalación desde cero en Ubuntu, aunque no tenga Git ni cURL
 
 **Requisitos:** Ubuntu Server 22.04, 24.04 o 26.04 LTS de 64 bits (`amd64`/`arm64`), acceso administrativo `sudo`, `apt` operativo, Internet saliente por HTTPS y systemd. No se admiten versiones sin soporte estándar como Ubuntu 20.04: debe actualizarse o migrarse con el equipo TIC. El túnel **Cloudflare Tunnel ya instalado** se conserva tal como está.
