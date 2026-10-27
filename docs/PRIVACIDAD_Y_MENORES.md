@@ -36,3 +36,12 @@ Antes de activar el registro real, establecer valores oficiales aprobados para M
 - /privacidad/renovar: renovación del enlace temporal.
 - /coordinacion/privacidad: revisión del documento.
 - /coordinacion/estado: aprobación de la cuenta.
+
+## PDF interactivo desde móviles, tabletas y ordenadores
+El endpoint `/privacidad/modelo.pdf` descarga un **PDF AcroForm rellenable** generado con `pdf-lib`, con los datos del menor prerrellenados de forma editable. Incluye campos para nombre, fecha de nacimiento, estudios, identidad y teléfono del representante, relación familiar y lugar/fecha. Los campos siguen siendo editables al guardar y volver a abrir el archivo.
+
+**Instrucciones para familias:** descargar el PDF y abrirlo con Adobe Acrobat Reader o un lector compatible; rellenar los campos, marcar la opción de parentesco y guardar el documento. Para la firma, emplear la opción del lector para dibujarla o firmar con un mecanismo electrónico admitido por el centro. Si no está disponible, imprimir, firmar y escanear el documento. Después, volver al enlace del trámite y adjuntar el PDF firmado (máximo 6 MB).
+
+El navegador integrado en algunas aplicaciones móviles puede mostrar los campos pero no guardar correctamente sus valores; por eso se recomienda descargarlo y abrirlo con un lector PDF dedicado.
+
+Una firma dibujada en pantalla no constituye por sí misma una firma electrónica cualificada ni acredita automáticamente la identidad. La coordinación deberá validar el documento y la representación legal conforme al procedimiento del centro.
