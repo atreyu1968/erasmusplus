@@ -148,6 +148,8 @@ function createAccountPage(req,api,notice=''){
  '<label>Perfil'+select('role',['teacher','student'])+'</label>'+
  '<label>Nombre'+input('first_name')+'</label>'+
  '<label>Apellidos'+input('last_name')+'</label>'+
+ '<label>Fecha de nacimiento'+input('birth_date','','date',10)+'</label>'+
+ '<label>Teléfono familiar (si es menor)'+input('guardian_phone','','tel',45)+'</label>'+
  '<label>DNI docente'+input('dni')+'</label>'+
  '<label>CIAL alumnado'+input('cial')+'</label>'+
  '<label>Correo institucional'+input('institutional_email','','email')+'</label>'+
@@ -161,16 +163,17 @@ function createAccountPage(req,api,notice=''){
 function createAccount(req,api,b){
  const role=clean(b.role),first=clean(b.first_name,100),last=clean(b.last_name,150),
   email=clean(b.institutional_email,200).toLowerCase(),dni=clean(b.dni,30).toUpperCase(),cial=clean(b.cial,30).toUpperCase(),
-  username=role==='teacher'?dni:cial;
+  username=role==='teacher'?dni:cial,
+  dob=clean(b.birth_date,10),age=ageOnRegistration(dob),guardian=clean(b.guardian_phone,45);
  if(!['teacher','student'].includes(role)||!first||!last||!username||!email.endsWith('@canariaseducacion.es')||
-  process.env.MMG_PRIVACY_VERSION==='PENDIENTE_REVISION'||!settings().configured){
+  age===null||age<12||age>100||(role==='teacher'&&age<18)||(age<18&&!guardian)||!privacyReady()||!settings().configured){
   createAccountPage(req,api,'La cuenta exige datos válidos, privacidad aprobada y Resend configurado.');return;
  }
  if(get('SELECT id FROM users WHERE username=? OR institutional_email=?',username,email)){
   createAccountPage(req,api,'Ya hay una cuenta con ese identificador o correo.');return;
  }
- const id=Number(run("INSERT INTO users(role,username,pass_hash,first_name,last_name,dni,cial,phone,institutional_email,center,professional_family,privacy_version,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'pending')",
-  role,username,'disabled-'+crypto.randomBytes(30).toString('hex'),first,last,dni,cial,clean(b.phone,45),email,
+ const id=Number(run("INSERT INTO users(role,username,pass_hash,first_name,last_name,dni,cial,phone,guardian_phone,birth_date,institutional_email,center,professional_family,privacy_version,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')",
+  role,username,'disabled-'+crypto.randomBytes(30).toString('hex'),first,last,dni,cial,clean(b.phone,45),guardian,dob,email,
   clean(b.center,200),schoolFamilies.includes(b.professional_family)?b.professional_family:null,
   process.env.MMG_PRIVACY_VERSION).lastInsertRowid);
  const token=crypto.randomBytes(32).toString('hex');
@@ -179,7 +182,7 @@ function createAccount(req,api,b){
  queueMail(email,'Confirma tu alta en Movilidades Erasmus+ MMG',
   'Coordinación ha creado una solicitud de cuenta Erasmus+ MMG. Confirma el correo desde este enlace (24 horas): '+
   publicUrl()+'/verificar?token='+token+
-  '\nCuando lo hayas confirmado, utiliza Recuperar acceso para crear tu contraseña. Coordinación deberá aprobar la cuenta.');
+  '\nCuando lo hayas confirmado, recibirás las indicaciones de aceptación de privacidad o autorización del representante. Tras la revisión, utiliza Recuperar acceso para crear tu contraseña.');
  audit(req.auth.user.id,'admin_account_created',id);
  createAccountPage(req,api,'Cuenta creada. El correo de verificación se ha incorporado a la cola de Resend.');
 }
