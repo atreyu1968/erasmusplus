@@ -108,6 +108,9 @@ log "Validando versión $NEW_SHA antes de detener el servicio."
   cd "$STAGE"
   npm ci --omit=dev --ignore-scripts --no-audit --no-fund
   find src scripts -name '*.mjs' -print0 | xargs -0 -n1 node --check
+  # mktemp crea el directorio con permisos 0700: sin esta línea el usuario
+  # nobody no puede entrar y las pruebas fallan en un despliegue real.
+  chmod 0755 "$STAGE"
   runuser -u nobody -- env HOME=/tmp npm test
 )
 printf '%s\n' "$NEW_SHA" > "$STAGE/.revision"
