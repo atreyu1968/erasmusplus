@@ -12,6 +12,30 @@ El instalador bloquea deliberadamente Ubuntu **25.04**, que está fuera de sopor
 
 **[Guía de migración desde Ubuntu 25.04, con pasos para conservar Cloudflare Tunnel](docs/MIGRACION_UBUNTU_25_04.md).**
 
+## Solución a `EACCES` durante las pruebas de instalación
+
+Si el instalador llega a `Node.js 24` y después termina con `npm error EACCES` al intentar leer `/opt/erasmusplus/releases/.prepare.*/package.json`, se trata de **un error de permisos del instalador anterior**, no de Ubuntu ni de tu cuenta.
+
+**Corregido en GitHub:** el script ahora concede permisos de lectura y acceso a todos los archivos y subdirectorios de la copia temporal antes de ejecutar las pruebas como usuario no privilegiado `nobody`. También se ha ajustado la recuperación para que no imprima dos veces el mismo error.
+
+Si el primer intento falló antes de arrancar la aplicación, **no borres** `/etc/erasmusplus`, `/var/lib/erasmusplus` ni las claves de respaldo. Reanuda en el mismo contenedor (si eres root puedes omitir `sudo`):
+
+```bash
+cd /root/erasmusplus
+git pull --ff-only
+bash deploy/install-ubuntu.sh
+```
+
+El instalador reutiliza la cuenta de servicio, la clave y el archivo de configuración ya creados. Cuando termine correctamente:
+
+```bash
+curl -fsS http://127.0.0.1:3000/healthz
+systemctl status erasmusplus --no-pager
+/usr/local/sbin/erasmusplus-init-admin
+```
+
+La respuesta de salud debe ser `ok`. La instalación inicial mantiene el registro de usuarios deshabilitado; el acceso externo desde otro contenedor Proxmox mediante Cloudflare se configura después con la IP privada de Ubuntu.
+
 ## Instalación confirmada: contenedor Ubuntu 26.04 en Proxmox
 
 El contenedor Erasmus+ MMG ya dispone de **Ubuntu 26.04 LTS**, con arquitectura x86_64. **Cloudflare Tunnel está en otro contenedor Proxmox**: es normal que no exista `cloudflared.service` dentro de Ubuntu. No reinstales el túnel.
