@@ -1,5 +1,5 @@
 // No cache of HTML, personalised responses, API calls, or personal documents.
-const CACHE='mmg-static-v1';
+const CACHE='mmg-static-v2';
 const STATIC=['/styles.css','/icon.svg'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(STATIC)));

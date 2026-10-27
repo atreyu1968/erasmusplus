@@ -65,9 +65,9 @@ function layout(req,title,main,{publicPage=false,status=200}={}){
   ).join('');
   const sessionActions=user?postButton('Cerrar sesión','/salir',csrf(req)):'<a class="btn small" href="/acceso">Acceder</a>';
   const page='<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#143e71"><title>'+X(title)+' · Erasmus+ MMG</title><link rel="stylesheet" href="/styles.css"><link rel="manifest" href="/manifest.webmanifest"></head><body>'+
-  '<div class="shell"><header class="topbar"><a class="brand" href="/"><span class="mark">MMG+</span><span class="brand-copy"><b>Movilidades Erasmus+</b><small>IES Manuel Martín González</small></span></a><span class="course-label">CURSO 2026–2027</span><div class="user"><span class="avatar">'+X((user?.first_name||'E').slice(0,1))+'</span><span class="user-name">'+X(user?.first_name||'Visitante')+'</span>'+sessionActions+'</div></header>'+
-  '<aside class="sidebar" aria-label="Navegación principal"><p class="side-label">GUÍA DE ISORA · TENERIFE</p><nav>'+sidebar+'</nav><div class="sidefooter">Enriqueciendo vidas.<br>Abriendo mentes.</div></aside>'+
-  '<div class="workspace"><main>'+main+'<footer>Movilidades Erasmus+ MMG · Fase 1 de desarrollo. No introducir datos reales hasta concluir la revisión de seguridad y protección de datos.</footer></main></div></div></body></html>';
+  '<div class="shell"><header class="topbar"><button class="sidebar-toggle" type="button" aria-label="Expandir menú" aria-controls="app-sidebar" aria-expanded="false" title="Expandir menú"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><a class="brand" href="/"><span class="mark">MMG+</span><span class="brand-copy"><b>Movilidades Erasmus+</b><small>IES Manuel Martín González</small></span></a><span class="course-label">CURSO 2026–2027</span><div class="user"><span class="avatar">'+X((user?.first_name||'E').slice(0,1))+'</span><span class="user-name">'+X(user?.first_name||'Visitante')+'</span>'+sessionActions+'</div></header>'+
+  '<aside class="sidebar" id="app-sidebar" aria-label="Navegación principal"><p class="side-label">GUÍA DE ISORA · TENERIFE</p><nav>'+sidebar+'</nav><div class="sidefooter">Enriqueciendo vidas.<br>Abriendo mentes.</div></aside>'+
+  '<div class="workspace"><main>'+main+'<footer>Movilidades Erasmus+ MMG · Fase 1 de desarrollo. No introducir datos reales hasta concluir la revisión de seguridad y protección de datos.</footer></main></div></div><script src="/navigation.js" defer></script></body></html>';
   const cookieResult=csrfToken(req);
   send(req,status,page,cookieResult.setCookie?{'Set-Cookie':cookieResult.setCookie}:{});
 }
@@ -326,7 +326,7 @@ async function handler(req,res){
   const u=new URL(req.url,'http://localhost');
   const url=u.pathname;
   req.auth=authFromRequest(req);
-  if(req.method==='GET'&&['/styles.css','/manifest.webmanifest','/icon.svg','/pwa.js','/sw.js','/passkeys.js'].includes(url)){
+   if(req.method==='GET'&&['/styles.css','/manifest.webmanifest','/icon.svg','/pwa.js','/sw.js','/passkeys.js','/navigation.js'].includes(url)){
     const name=url.slice(1);
     const data=await readFile(new URL('../public/'+name,import.meta.url));
     header(req,200,url.endsWith('.css')?'text/css; charset=utf-8':url.endsWith('.js')?'text/javascript; charset=utf-8':url.endsWith('.svg')?'image/svg+xml':'application/manifest+json; charset=utf-8',url==='/sw.js'?{'Service-Worker-Allowed':'/'}:{});
