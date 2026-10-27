@@ -68,7 +68,7 @@ Debes **verificar el dominio remitente y sus registros DNS en el panel de Resend
 
 La pantalla **Reenviar verificación** permite pedir otro enlace si el inicial caducó o no llegó. El sistema no confirma públicamente la existencia de una cuenta.
 
-## Despliegue final con Nginx y systemd
+## Despliegue con Cloudflare Tunnel existente y systemd
 
 Hay ejemplos iniciales en \`deploy/\`, que deben adaptarse al subdominio institucional, usuario de servicio, permisos de red y certificados gestionados por TIC.
 
@@ -78,7 +78,7 @@ Para producción:
 - \`MMG_SECURE_COOKIE=1\`
 - \`MMG_SECRET\` de al menos 48 caracteres
 - \`HOST=127.0.0.1\` y aplicación **no accesible directamente desde Internet**
-- Nginx con TLS, reglas seguras y proxy al puerto 3000 local
+- Cloudflare Tunnel existente con ruta HTTPS al puerto local 3000; configurar reglas perimetrales y revisar Cloudflare Access para coordinación
 - Copias de seguridad cifradas, retención, permisos restrictivos y restauración probada
 
 ## Funciones aún pendientes
