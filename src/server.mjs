@@ -8,10 +8,10 @@ import {
 import { settings, configureResend, sendMail, publicUrl } from './mailer.mjs';
 import crypto from 'node:crypto';
 import {extraRoute,startMailWorker} from './features.mjs';
+import {privacyReady,ageOnRegistration,acknowledgeAdult,clearance,emailGuardianLink} from './feature-privacy.mjs';
 
 const host=process.env.HOST || '127.0.0.1', port=Number(process.env.PORT || 3000);
-const isRegistrationOpen=() => process.env.MMG_ENABLE_REGISTRATION==='1'
-  && process.env.MMG_PRIVACY_VERSION && process.env.MMG_PRIVACY_VERSION!=='PENDIENTE_REVISION';
+const isRegistrationOpen=() => process.env.MMG_ENABLE_REGISTRATION==='1' && privacyReady();
 const X=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const header=(req,status,contentType='text/html; charset=utf-8',more={})=>{
   const h={
@@ -36,8 +36,8 @@ const nav=[['/panel','⌂','Inicio'],['/candidatura','▤','Candidatura Erasmus'
 function layout(req,title,main,{publicPage=false,status=200}={}){
   const user=req.auth?.user;
   const current=req.url.split('?')[0];
-  const links=publicPage?[['/','⌂','Inicio'],['/acceso','⇥','Acceso'],['/registro','♙','Registro']]:
-    [...nav,...(user?.role==='coordinator'?[['/coordinacion','▦','Control de cuentas'],['/coordinacion/candidaturas','▤','Candidaturas recibidas'],['/coordinacion/documentos','▣','Archivo documental'],['/coordinacion/grupos','♙','Grupos de movilidad'],['/coordinacion/configuracion','⚙','Configurar Resend']]:[])];
+  const links=publicPage?[['/','⌂','Inicio'],['/acceso','⇥','Acceso'],['/registro','♙','Registro'],['/privacidad','§','Privacidad']]:
+    [...nav,...(user?.role==='coordinator'?[['/coordinacion','▦','Control de cuentas'],['/coordinacion/candidaturas','▤','Candidaturas recibidas'],['/coordinacion/documentos','▣','Archivo documental'],['/coordinacion/grupos','♙','Grupos de movilidad'],['/coordinacion/privacidad','✓','Autorizaciones de menores'],['/coordinacion/crear-cuenta','＋','Crear cuenta'],['/coordinacion/configuracion','⚙','Configurar Resend']]:[])];
   const sidebar=links.map(([href,icon,name])=>'<a class="nav'+(href===current?' current':'')+'" href="'+href+'"><i>'+icon+'</i>'+X(name)+'</a>').join('');
   const sessionActions=user?postButton('Cerrar sesión','/salir',csrf(req)):'<a class="btn small" href="/acceso">Acceder</a>';
   const page='<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#143e71"><title>'+X(title)+' · Erasmus+ MMG</title><link rel="stylesheet" href="/styles.css"><link rel="manifest" href="/manifest.webmanifest"></head><body>'+
@@ -90,7 +90,7 @@ function registration(req,msg=''){
  '<h2>3. Credenciales</h2><p class="muted">El usuario será el DNI del docente o el CIAL del alumnado. Confirmarás tu correo con un enlace enviado mediante Resend. Después, coordinación deberá aprobar la cuenta.</p><div class="fields">'+
  field('Contraseña (mínimo 12 caracteres)','password',{type:'password',required:true,extra:'minlength="12" maxlength="128" autocomplete="new-password"'})+
  field('Repetir contraseña','password_again',{type:'password',required:true,extra:'minlength="12" maxlength="128"'})+'</div>'+
- '<label class="checkbox"><input type="checkbox" name="privacy" value="yes" required> Confirmo que he leído la información de privacidad publicada por el centro.</label>'+
+ '<label class="checkbox"><input type="checkbox" name="privacy" value="yes" required> He leído el <a href="/privacidad" target="_blank" rel="noopener noreferrer">aviso de privacidad</a> y acuso recibo de la información. Si soy mayor de edad, se registrará electrónicamente mi aceptación informativa; si soy menor, mi representante legal deberá firmar y subir un PDF de autorización.</label>'+
  '<button class="btn" type="submit" '+(open?'':'disabled')+'>Enviar solicitud</button></form>';
  layout(req,'Registro','<div class="heading"><p class="eyebrow">SOLICITUD DE CUENTA</p><h1>Registro de participantes</h1><p>Formulario de alumnado y docentes con aprobación manual obligatoria.</p></div>'+
  (!open?formAlert('Registro deshabilitado. Coordinación debe configurar Resend y aprobar el aviso de privacidad antes de abrir las altas.'):'')+
@@ -129,15 +129,15 @@ function verificationConfirm(req,token){
  '<form class="card form" method="post" action="/verificar"><input type="hidden" name="csrf" value="'+csrf(req)+'"><input type="hidden" name="token" value="'+X(token)+'"><button class="btn">Confirmar mi correo</button></form></div>',{publicPage:true});
 }
 function adminDashboard(req,notice=''){
- const users=all("SELECT id,role,username,first_name,last_name,institutional_email,status,email_verified_at,created_at FROM users WHERE role!='coordinator' ORDER BY created_at DESC LIMIT 150");
+ const users=all("SELECT id,role,username,first_name,last_name,birth_date,institutional_email,status,email_verified_at,created_at FROM users WHERE role!='coordinator' ORDER BY created_at DESC LIMIT 150");
  const total=users.length,pending=users.filter(u=>u.status==='pending').length,teachers=users.filter(u=>u.role==='teacher').length,students=users.filter(u=>u.role==='student').length;
  const rows=users.map(u=>'<tr><td><b>'+X(u.first_name+' '+u.last_name)+'</b><small>'+X(u.role==='teacher'?'Docente':'Alumnado')+'</small></td>'+
- '<td>'+X(u.institutional_email)+'</td><td>'+X(u.email_verified_at?'Verificado':'Pendiente')+'</td><td><span class="pill">'+X(u.status)+'</span></td><td><a href="/coordinacion/usuario/'+u.id+'">Ficha</a></td><td>'+
+ '<td>'+X(u.institutional_email)+'</td><td>'+X(u.email_verified_at?'Verificado':'Pendiente')+'</td><td>'+X(clearance(u).label)+'</td><td><span class="pill">'+X(u.status)+'</span></td><td><a href="/coordinacion/usuario/'+u.id+'">Ficha</a></td><td>'+
  (u.status==='pending'?postButton('Aprobar','/coordinacion/estado',csrf(req),'<input type="hidden" name="id" value="'+u.id+'"><input type="hidden" name="status" value="approved">'):'')+
  (u.status!=='disabled'?postButton('Desactivar','/coordinacion/estado',csrf(req),'<input type="hidden" name="id" value="'+u.id+'"><input type="hidden" name="status" value="disabled">'):'')+'</td></tr>').join('');
  layout(req,'Control de cuentas','<div class="heading"><p class="eyebrow">ADMINISTRACIÓN ERASMUS+ MMG</p><h1>Panel de coordinación</h1><p>Registro y aprobación de cuentas. Solo podrán aprobarse usuarios con correo institucional verificado.</p></div>'+
  (notice?formAlert(notice):'')+'<div class="metrics"><div><span>REGISTRADOS</span><b>'+total+'</b></div><div><span>PENDIENTES</span><b>'+pending+'</b></div><div><span>DOCENTES</span><b>'+teachers+'</b></div><div><span>ALUMNADO</span><b>'+students+'</b></div></div>'+
- '<div class="card"><div class="row"><h2>Control de cuentas</h2><a class="btn small" href="/coordinacion/configuracion">⚙ Configurar Resend</a></div><div class="responsive"><table><thead><tr><th>Participante</th><th>Correo</th><th>Verificación</th><th>Estado</th><th>Ficha</th><th>Acciones</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+ '<div class="card"><div class="row"><h2>Control de cuentas</h2><a class="btn small" href="/coordinacion/privacidad">✓ Revisar autorizaciones de menores</a><a class="btn small" href="/coordinacion/configuracion">⚙ Configurar Resend</a></div><div class="responsive"><table><thead><tr><th>Participante</th><th>Correo</th><th>Verificación</th><th>Estado</th><th>Ficha</th><th>Acciones</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
  (users.length?'':'<p>Sin solicitudes de participantes.</p>')+'</div>');
 }
 function adminUser(req,id){
@@ -195,12 +195,11 @@ async function register(req,body){
  const username=lookupUsername(body,role),email=String(body.institutional_email||'').trim().toLowerCase();
  const first=String(body.first_name||'').trim(),last=String(body.last_name||'').trim();
  const password=String(body.password||''),dob=String(body.birth_date||'');
- const birth=new Date(dob+'T00:00:00Z'),now=new Date();
- const age=now.getUTCFullYear()-birth.getUTCFullYear()-((now.getUTCMonth()*32+now.getUTCDate())<(birth.getUTCMonth()*32+birth.getUTCDate())?1:0);
+ const age=ageOnRegistration(dob);
  if(!username || username.length>30 || !first || !last || first.length>100 || last.length>150 ||
     !email.endsWith('@canariaseducacion.es') || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
     password.length<12 || password.length>128 || password!==body.password_again ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(dob) || Number.isNaN(birth.getTime()) || age<12 || age>100 ||
+    (age===null) || age<12 || age>100 || (role==='teacher' && age<18) ||
     (age<18 && !String(body.guardian_phone||'').trim()) ||
     !String(body.phone||'').trim() || body.privacy!=='yes' ||
     !String(body.professional_family||'').trim() || !String(body.center||'').trim()) {
@@ -214,6 +213,7 @@ async function register(req,body){
    String(body.guardian_phone||'').trim(),email,String(body.gmail||'').trim(),
    String(body.professional_family||'').trim(),String(body.center||'').trim(),String(body.studies||'').trim(),String(body.modules||'').trim(),process.env.MMG_PRIVACY_VERSION);
  const id=Number(info.lastInsertRowid);
+ if(age>=18)acknowledgeAdult(id);
  audit(null,'registration_requested',id);
  let note='Solicitud guardada. Revisa tu correo institucional para confirmar el enlace. Después, coordinación aprobará la cuenta.';
  try {await sendVerification({id,first_name:first,institutional_email:email});}
@@ -246,8 +246,14 @@ async function verifyAction(req,body){
  run('UPDATE users SET email_verified_at=CURRENT_TIMESTAMP WHERE id=?',row.user_id);
  run('DELETE FROM verification_tokens WHERE user_id=?',row.user_id);
  audit(row.user_id,'email_verified',row.user_id);
+ const verifiedUser=get('SELECT * FROM users WHERE id=?',row.user_id);
+ let guardianInstruction='';
+ if(verifiedUser && ageOnRegistration(verifiedUser.birth_date)<18){
+  try{await emailGuardianLink(verifiedUser);guardianInstruction=' Por ser menor de edad, hemos enviado al correo institucional un enlace para descargar y entregar la autorización firmada del representante legal.';}
+  catch(e){console.error('Error enviando trámite de menor:',e.message);guardianInstruction=' Si eres menor, solicita otro enlace en la sección de autorización familiar.';}
+ }
  layout(req,'Correo verificado','<div class="form-container">'+success('Correo verificado correctamente',
-   'Tu solicitud está pendiente de aprobación manual por coordinación. Recibirás un correo cuando se revise.')+
+   'Tu solicitud está pendiente de aprobación manual por coordinación. Recibirás un correo cuando se revise.'+guardianInstruction)+
  '<p><a class="btn" href="/acceso">Ir al acceso</a></p></div>',{publicPage:true});
 }
 async function resendAction(req,body){
@@ -273,6 +279,7 @@ async function updateStatus(req,body){
  const user=get("SELECT * FROM users WHERE id=? AND role!='coordinator'",id);
  if(!user){error(req,404,'Usuario no encontrado.');return;}
  if(status==='approved'&&!user.email_verified_at){adminDashboard(req,'No se puede aprobar una cuenta sin verificar primero su correo institucional.');return;}
+ if(status==='approved'&&!clearance(user).approved){adminDashboard(req,'No se puede aprobar esta cuenta: '+clearance(user).label+'.');return;}
  run('UPDATE users SET status=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=? WHERE id=?',status,req.auth.user.id,id);
  if(status!=='approved')run('DELETE FROM sessions WHERE user_id=?',id);
  audit(req.auth.user.id,'status_'+status,id);
