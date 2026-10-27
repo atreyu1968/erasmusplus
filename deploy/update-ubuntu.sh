@@ -137,4 +137,9 @@ SWITCHED=0
 STOPPED=0
 trap - ERR INT TERM
 log "Nueva versión operativa: $NEW_SHA. Cloudflare Tunnel no se ha modificado."
+# Renovar el propio actualizador solo después de validar el arranque.
+if [[ -f "$FINAL/deploy/update-ubuntu.sh" ]]; then
+  install -m 0750 "$FINAL/deploy/update-ubuntu.sh" /usr/local/sbin/.erasmusplus-update.next
+  mv -fT /usr/local/sbin/.erasmusplus-update.next /usr/local/sbin/erasmusplus-update
+fi
 find "$BACKUP_DIR" -maxdepth 1 -name 'pre-update-*.tar.gz.age' -type f -mtime +14 -delete
