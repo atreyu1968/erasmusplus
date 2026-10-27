@@ -106,18 +106,18 @@ function home(req){
 }
 function destinationsPage(req){
  layout(req,'Destinos Erasmus','<div class="heading"><p class="eyebrow">DESCUBRE EUROPA</p><h1>Destinos Erasmus</h1><p>Información del curso 2026–2027.</p></div>'+destinationCards()+
- '<div class="card"><h2>Destinos por familia profesional</h2><div class="responsive"><table><tr><th>Familia profesional</th><th>Destino</th></tr>'+
+ '<div class="card"><h2>Fichas culturales</h2><p><a href="/destinos/viseu">Viseu</a> · <a href="/destinos/oporto">Oporto</a> · <a href="/destinos/roterdam">Róterdam</a></p></div><div class="card"><h2>Destinos por familia profesional</h2><div class="responsive"><table><tr><th>Familia profesional</th><th>Destino</th></tr>'+
  [['Transporte y mantenimiento de vehículos','Viseu'],['Administración y gestión','Oporto y Róterdam'],['Agraria','Róterdam'],['Edificación y obra civil','Viseu'],['Imagen personal','Viseu y Róterdam']].map(([family,dest])=>'<tr><td>'+X(family)+'</td><td>'+X(dest)+'</td></tr>').join('')+
  '</table></div><p class="muted">La asignación definitiva depende de la convocatoria aprobada.</p></div>');
 }
 function typesPage(req){
  layout(req,'Tipos de movilidad','<div class="heading"><p class="eyebrow">OPORTUNIDADES FORMATIVAS</p><h1>Tipos de movilidad</h1><p>Modalidades previstas en el proyecto.</p></div>'+
- '<div class="two"><div class="card"><span class="tag">MOVILIDAD CORTA</span><h2>10 días en Países Bajos</h2><p>Actividades formativas, convivencia y visita a centros como Albeda y RDM Campus. Viaje Tenerife Sur–Ámsterdam Schiphol previsto entre febrero y marzo de 2027.</p><p>Desplazamientos en transporte público y convivencia en apartamentos.</p></div>'+
+ '<div class="card"><p><a class="btn" href="/movilidad/corta">Infografía de movilidad corta</a> <a class="btn" href="/movilidad/larga">Infografía Dual-Erasmus+</a></p></div><div class="two"><div class="card"><span class="tag">MOVILIDAD CORTA</span><h2>10 días en Países Bajos</h2><p>Actividades formativas, convivencia y visita a centros como Albeda y RDM Campus. Viaje Tenerife Sur–Ámsterdam Schiphol previsto entre febrero y marzo de 2027.</p><p>Desplazamientos en transporte público y convivencia en apartamentos.</p></div>'+
  '<div class="card"><span class="tag">DUAL ERASMUS+</span><h2>Movilidad larga · 2,5 meses</h2><p>Formación en empresa u organismo equiparado para alumnado de segundo curso de ciclos de grado medio y superior, según los destinos y plazas confirmados.</p><p>Autonomía, desarrollo profesional y enriquecimiento personal.</p></div></div>');
 }
 function rulesPage(req){
  layout(req,'Normativa','<div class="heading"><p class="eyebrow">DOCUMENTACIÓN Y RESPONSABILIDAD</p><h1>Normativa Erasmus+</h1><p>Esta sección se completará con la normativa de la convocatoria, SIFPRE y las guías de viaje específicas de Portugal y Países Bajos.</p></div>'+
- '<div class="card"><h2>Documentación pendiente de validación</h2><p>La versión operativa incorporará los compromisos de participantes, documentos descargables y firma o aceptación verificable.</p><p><a href="https://erasmus-plus.ec.europa.eu/es" target="_blank" rel="noopener noreferrer">Portal oficial Erasmus+ de la Unión Europea ↗</a></p></div>');
+ '<div class="card"><h2>Normativa vigente y guías por destino</h2><p><a class="btn" href="/normativa/completa">Consultar normativa Erasmus+ FP y las guías de viaje Portugal / Países Bajos</a></p></div><div class="card"><h2>Documentación pendiente de validación</h2><p>La versión operativa incorporará los compromisos de participantes, documentos descargables y firma o aceptación verificable.</p><p><a href="https://erasmus-plus.ec.europa.eu/es" target="_blank" rel="noopener noreferrer">Portal oficial Erasmus+ de la Unión Europea ↗</a></p></div>');
 }
 function resendForm(req,msg=''){
  layout(req,'Reenviar verificación','<div class="form-container"><h1>Reenviar verificación</h1><p>Si la cuenta está pendiente de confirmar el correo, se enviará un nuevo enlace. Por privacidad, no se indicará si el usuario existe.</p>'+
@@ -290,10 +290,10 @@ async function handler(req,res){
   const u=new URL(req.url,'http://localhost');
   const url=u.pathname;
   req.auth=authFromRequest(req);
-  if(req.method==='GET'&&['/styles.css','/manifest.webmanifest'].includes(url)){
-    const name=url==='/styles.css'?'styles.css':'manifest.webmanifest';
+  if(req.method==='GET'&&['/styles.css','/manifest.webmanifest','/icon.svg','/pwa.js','/sw.js'].includes(url)){
+    const name=url.slice(1);
     const data=await readFile(new URL('../public/'+name,import.meta.url));
-    header(req,200,url.endsWith('css')?'text/css; charset=utf-8':'application/manifest+json; charset=utf-8');
+    header(req,200,url.endsWith('.css')?'text/css; charset=utf-8':url.endsWith('.js')?'text/javascript; charset=utf-8':url.endsWith('.svg')?'image/svg+xml':'application/manifest+json; charset=utf-8',url==='/sw.js'?{'Service-Worker-Allowed':'/'}:{});
     res.end(data);return;
   }
 
