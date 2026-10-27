@@ -94,23 +94,50 @@ function guardianSession(req){
  const hash=crypto.createHash('sha256').update(value).digest('hex');
  const token=get('SELECT user_id,expires_at FROM guardian_access_tokens WHERE token_hash=?',hash);
  if(!token||token.expires_at<Date.now())return null;
- const user=get("SELECT * FROM users WHERE id=? AND role='student' AND status='pending' AND email_verified_at IS NOT NULL",token.user_id);
- if(!user||ageOnRegistration(user.birth_date)>=18)return null;
+ const user=get("SELECT * FROM users WHERE id=? AND status='pending' AND email_verified_at IS NOT NULL",token.user_id);
+ if(!user||ageOnRegistration(user.birth_date)===null)return null;
  return user;
 }
 export async function emailGuardianLink(user){
- if(ageOnRegistration(user.birth_date)>=18||!user.email_verified_at||user.role!=='student')return false;
+ if(!user.email_verified_at || clearance(user).approved)return false;
  const token=crypto.randomBytes(32).toString('hex');
  run('DELETE FROM guardian_access_tokens WHERE user_id=?',user.id);
  run('INSERT INTO guardian_access_tokens(token_hash,user_id,expires_at) VALUES (?,?,?)',
   crypto.createHash('sha256').update(token).digest('hex'),user.id,Date.now()+7*24*3600*1000);
  await sendMail(user.institutional_email,'Documento del representante legal · Erasmus+ MMG',
-   'Hola '+user.first_name+'.\n\nComo eres menor de 18 años, para tramitar tu participación el centro solicita que una persona con representación legal firme y entregue el modelo adjunto mediante la plataforma.\n\n'+
+   'Hola '+user.first_name+'.\n\nPara completar la solicitud de acceso Erasmus+ MMG debes formalizar el trámite de protección de datos: las personas adultas mediante aceptación electrónica y las menores de 18 años mediante el modelo PDF firmado por su representante legal.\n\n'+
    'Abre este enlace de acceso limitado, válido durante 7 días:\n'+publicUrl()+'/privacidad/tramite?token='+token+
    '\n\nNo compartas este enlace salvo con tu representante legal. Tras subir el PDF, coordinación lo revisará antes de aprobar la cuenta.');
  audit(user.id,'guardian_upload_link_sent',user.id);
  return true;
 }
+
+function adultPortal(req,api,msg=''){
+ const user=guardianSession(req);
+ if(!user || ageOnRegistration(user.birth_date)<18){portalUnavailable(req,api);return;}
+ const approved=clearance(user).approved;
+ let html=heading('PROTECCIÓN DE DATOS','Aceptación electrónica de persona adulta',
+  'Completa tu solicitud de acceso confirmando que has recibido y leído la información de privacidad.');
+ html+=panel('Datos del participante','<p>'+E(user.first_name+' '+user.last_name)+' · '+E(user.institutional_email)+'</p>');
+ if(msg)html+=panel('Resultado',E(msg));
+ html+=panel('Aviso de privacidad','<p>Versión: '+E(noticeVersion())+'</p><p><a href="/privacidad" target="_blank" rel="noopener noreferrer">Leer información completa sobre el tratamiento de datos ↗</a></p>'+
+ '<p>Este acuse de recibo no equivale al consentimiento para finalidades opcionales ni sustituye las autorizaciones adicionales que correspondan.</p>');
+ if(approved)html+=panel('Confirmación registrada','<p>Consta electrónicamente que has recibido y leído el aviso. Coordinación revisará tu cuenta antes de autorizar el acceso.</p>');
+ else html+='<form class="card form" method="post" action="/privacidad/aceptar">'+
+ '<label class="checkbox"><input type="checkbox" name="accept" value="yes" required> Confirmo de forma expresa que he recibido y leído la información de privacidad de esta versión.</label>'+
+ '<input type="hidden" name="csrf" value="'+E(api.csrf(req))+'"><button class="btn" type="submit">Registrar mi aceptación electrónica</button></form>';
+ api.layout(req,'Aceptación electrónica',html,{publicPage:true});
+}
+async function adultAccept(req,api){
+ const user=guardianSession(req);
+ if(!user||ageOnRegistration(user.birth_date)<18){portalUnavailable(req,api);return;}
+ const form=await api.readForm(req);
+ if(!api.requireCSRF(req,form))return;
+ if(form.accept!=='yes'){adultPortal(req,api,'Debes confirmar el aviso para continuar.');return;}
+ if(!clearance(user).approved)acknowledgeAdult(user.id);
+ adultPortal(req,api,'Aceptación electrónica registrada con fecha, hora y huella de la versión del aviso.');
+}
+
 function documentForGuardian(user){
  const rowlist=[
   ['Documento','Autorización para participación en Movilidades Erasmus+ MMG y declaración de información de protección de datos.'],
@@ -134,6 +161,7 @@ function documentForGuardian(user){
 function guardianPortal(req,api,msg=''){
  const user=guardianSession(req);
  if(!user){portalUnavailable(req,api);return;}
+ if(ageOnRegistration(user.birth_date)>=18){adultPortal(req,api,msg);return;}
  const status=clearance(user);
  const records=all('SELECT status,submitted_at,review_note FROM guardian_documents WHERE user_id=? ORDER BY id DESC LIMIT 5',user.id);
  let h=heading('REGISTRO DE MENORES','Autorización del representante legal',
@@ -172,7 +200,7 @@ function guardianToken(req,api){
  const hash=crypto.createHash('sha256').update(raw).digest('hex');
  const row=get('SELECT * FROM guardian_access_tokens WHERE token_hash=?',hash);
  const user=row&&get('SELECT * FROM users WHERE id=?',row.user_id);
- if(!row||row.expires_at<Date.now()||!user||!user.email_verified_at||user.status!=='pending'||ageOnRegistration(user.birth_date)>=18){
+ if(!row||row.expires_at<Date.now()||!user||!user.email_verified_at||user.status!=='pending'||ageOnRegistration(user.birth_date)===null){
   portalUnavailable(req,api);return;
  }
  api.redirect(req,'/privacidad/tramite',{'Set-Cookie':cookie('mmg_guardian',raw,7*24*3600)});
@@ -248,8 +276,8 @@ async function renew(req,api,b){
  const key='guardian-renew:'+req.socket.remoteAddress+':'+username;
  if(canTry(key)){
   countTry(key,false);
-  const user=get("SELECT * FROM users WHERE username=? AND role='student' AND status='pending' AND email_verified_at IS NOT NULL",username);
-  if(user&&ageOnRegistration(user.birth_date)<18){
+  const user=get("SELECT * FROM users WHERE username=? AND status='pending' AND email_verified_at IS NOT NULL",username);
+  if(user&&!clearance(user).approved){
    try{await emailGuardianLink(user);}catch(e){console.error('Error enviando autorización del representante:',e.message);}
   }
  }
@@ -270,6 +298,7 @@ export async function privacyRoutes(req,url,method,api){
    audit(user.id,'guardian_template_downloaded',user.id);return true;
  }
  if(url==='/privacidad/subir'&&method==='POST'){await guardianSubmit(req,api);return true;}
+ if(url==='/privacidad/aceptar'&&method==='POST'){await adultAccept(req,api);return true;}
  if(url==='/privacidad/renovar'){
    if(method==='GET')renewalForm(req,api);
    else if(method==='POST'){const b=await api.readForm(req);if(api.requireCSRF(req,b))await renew(req,api,b);}
