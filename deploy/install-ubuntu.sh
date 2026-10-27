@@ -27,7 +27,7 @@ if ! apt-get update; then
 fi
 apt-get install -y ca-certificates curl git gnupg openssl age unattended-upgrades
 
-if ! command -v node >/dev/null || [[ "$(node --version)" != v24.* ]]; then
+if [[ ! -x /usr/bin/node ]] || [[ "$(/usr/bin/node --version)" != v24.* ]]; then
   log 'Instalando Node.js 24 desde repositorio APT de NodeSource firmado.'
   install -d -m 0755 /usr/share/keyrings
   TMPKEY=$(mktemp)
@@ -57,10 +57,13 @@ EOF
   apt-get update
   apt-get install -y nodejs
 fi
-[[ "$(node --version)" == v24.* ]] || die "La versión Node.js instalada es $(node --version), se exige 24."
+[[ -x /usr/bin/node && "$(/usr/bin/node --version)" == v24.* ]] || die 'Se requiere Node.js 24 instalado en /usr/bin/node.'
 command -v npm >/dev/null || die 'No se ha encontrado npm.'
 log "Versiones: $(node --version), npm $(npm --version)."
 
+if [[ ! -L /opt/erasmusplus/current && -f /var/lib/erasmusplus/erasmus.sqlite3 ]]; then
+  die 'Existe una base de datos anterior sin despliegue identificado. Haz una copia y migra con TIC antes de continuar.'
+fi
 id erasmusmmg >/dev/null 2>&1 ||
   useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin erasmusmmg
 install -d -m 0755 /opt/erasmusplus /opt/erasmusplus/releases
