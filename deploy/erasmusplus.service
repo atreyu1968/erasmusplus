@@ -1,0 +1,33 @@
+[Unit]
+Description=Movilidades Erasmus+ MMG · Node.js/SQLite
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=erasmusmmg
+Group=erasmusmmg
+WorkingDirectory=/opt/erasmusplus/current
+EnvironmentFile=/etc/erasmusplus/erasmusplus.env
+ExecStart=/usr/bin/node /opt/erasmusplus/current/src/server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=25
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+PrivateDevices=true
+ReadWritePaths=/var/lib/erasmusplus
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
