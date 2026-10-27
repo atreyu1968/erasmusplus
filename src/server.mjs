@@ -248,9 +248,13 @@ async function verifyAction(req,body){
  audit(row.user_id,'email_verified',row.user_id);
  const verifiedUser=get('SELECT * FROM users WHERE id=?',row.user_id);
  let guardianInstruction='';
- if(verifiedUser && ageOnRegistration(verifiedUser.birth_date)<18){
-  try{await emailGuardianLink(verifiedUser);guardianInstruction=' Por ser menor de edad, hemos enviado al correo institucional un enlace para descargar y entregar la autorización firmada del representante legal.';}
-  catch(e){console.error('Error enviando trámite de menor:',e.message);guardianInstruction=' Si eres menor, solicita otro enlace en la sección de autorización familiar.';}
+ if(verifiedUser && !clearance(verifiedUser).approved){
+  try{
+    await emailGuardianLink(verifiedUser);
+    guardianInstruction=ageOnRegistration(verifiedUser.birth_date)<18?
+      ' Por ser menor de edad, hemos enviado al correo institucional un enlace para descargar y entregar la autorización firmada del representante legal.':
+      ' Hemos enviado un enlace para registrar electrónicamente la aceptación informativa de privacidad.';
+  }catch(e){console.error('Error enviando trámite de privacidad:',e.message);guardianInstruction=' Puedes solicitar otro enlace de privacidad desde la sección correspondiente.';}
  }
  layout(req,'Correo verificado','<div class="form-container">'+success('Correo verificado correctamente',
    'Tu solicitud está pendiente de aprobación manual por coordinación. Recibirás un correo cuando se revise.'+guardianInstruction)+
