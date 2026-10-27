@@ -1,5 +1,5 @@
 import { get,all,run,audit } from './db.mjs';
-import { escape as E,clean,validId,heading,panel,datatable,formEnd,input,select,queueMail,multipart,storeUpload,isAdmin } from './feature-service.mjs';
+import { escape as E,clean,validId,heading,panel,datatable,formEnd,input,select,queueMail,multipart,storeUpload,isAdmin,activeEdition,editionForUser } from './feature-service.mjs';
 
 function noticePage(req,api,notice=''){
  const u=req.auth.user,items=all("SELECT n.*,u.first_name,u.last_name FROM notices n JOIN users u ON u.id=n.author_id WHERE n.audience='all' OR n.audience=? ORDER BY n.created_at DESC LIMIT 100",u.role);
@@ -52,7 +52,10 @@ async function publishNotice(req,api){
 function directory(u){
  if(isAdmin(u))return all("SELECT id,first_name,last_name,role FROM users WHERE status='approved' AND id!=? ORDER BY first_name,last_name LIMIT 200",u.id);
  // Participants see coordination and members of their own approved mobility groups only.
- return all("SELECT DISTINCT u.id,u.first_name,u.last_name,u.role FROM users u WHERE u.status='approved' AND u.id!=? AND (u.role='coordinator' OR EXISTS (SELECT 1 FROM group_members a JOIN group_members b ON b.group_id=a.group_id WHERE a.user_id=? AND b.user_id=u.id)) ORDER BY u.first_name,u.last_name LIMIT 200",u.id,u.id);
+  return all("SELECT DISTINCT u.id,u.first_name,u.last_name,u.role FROM users u WHERE u.status='approved' AND u.id!=? AND "+
+   "(u.role='coordinator' OR EXISTS (SELECT 1 FROM group_members a JOIN group_members b ON b.group_id=a.group_id "+
+   "JOIN mobility_groups g ON g.id=a.group_id WHERE a.user_id=? AND b.user_id=u.id AND g.edition_id=? AND u.edition_id=g.edition_id)) "+
+   "ORDER BY u.first_name,u.last_name LIMIT 200",u.id,u.id,editionForUser(u)?.id||null);
 }
 function conversation(req,api,msg=''){
  const user=req.auth.user;
@@ -63,21 +66,23 @@ function conversation(req,api,msg=''){
  let group=null;
  if(groupId){
   group=get('SELECT * FROM mobility_groups WHERE id=?',groupId);
-  if(!group||(!isAdmin(user)&&!get('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',groupId,user.id))){
+   if(!group||(!isAdmin(user)&&(!get('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',groupId,user.id)||
+    group.edition_id!==editionForUser(user)?.id))){
    api.error(req,404,'No existe el grupo o no tienes autorización.');return;
   }
  }
  const direct=selected?all("SELECT m.*,u.first_name,u.last_name FROM messages m JOIN users u ON u.id=m.sender_id WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?) ORDER BY m.id DESC LIMIT 100",
    user.id,selected.id,selected.id,user.id).reverse():[];
  const inGroup=group?all("SELECT m.*,u.first_name,u.last_name FROM messages m JOIN users u ON u.id=m.sender_id WHERE group_id=? ORDER BY m.id DESC LIMIT 100",group.id).reverse():[];
- const membership=isAdmin(user)?all('SELECT * FROM mobility_groups ORDER BY id DESC'):
-  all('SELECT g.* FROM mobility_groups g JOIN group_members m ON m.group_id=g.id WHERE m.user_id=? ORDER BY g.id DESC',user.id);
+  const membership=isAdmin(user)?all('SELECT g.*,e.label AS edition_label FROM mobility_groups g JOIN erasmus_editions e ON e.id=g.edition_id ORDER BY g.id DESC'):
+   all('SELECT g.*,e.label AS edition_label FROM mobility_groups g JOIN erasmus_editions e ON e.id=g.edition_id '+
+    'JOIN group_members m ON m.group_id=g.id WHERE m.user_id=? AND g.edition_id=? ORDER BY g.id DESC',user.id,editionForUser(user)?.id||null);
  const selectedMessages=group?inGroup:direct;
  let output=heading('COMUNICACIÓN ENTRE PARTICIPANTES','Chat interno','Contacta con coordinación, docentes y alumnado autorizado de las movilidades.');
  if(msg)output+=panel('Mensaje',E(msg));
  output+='<div class="chat-grid"><section class="card"><h2>Libreta de participantes</h2>'+
   recipients.map(x=>'<p><a href="/chat?con='+x.id+'">'+E(x.first_name+' '+x.last_name)+'</a> <small> · '+E(x.role==='teacher'?'Docente':x.role==='student'?'Alumnado':'Coordinación')+'</small></p>').join('')+
-  '<h2>Grupos de movilidad</h2>'+membership.map(g=>'<p><a href="/chat?grupo='+g.id+'">'+E(g.name)+'</a></p>').join('')+
+  '<h2>Grupos de movilidad</h2>'+membership.map(g=>'<p><a href="/chat?grupo='+g.id+'">'+E(g.name)+'</a> <small> · '+E(g.edition_label)+'</small></p>').join('')+
   '</section><section class="card"><h2>'+E(group?'Grupo: '+group.name:selected?selected.first_name+' '+selected.last_name:'Selecciona una conversación')+'</h2>'+
   '<div class="conversation">'+selectedMessages.map(m=>'<article class="bubble'+(m.sender_id===user.id?' mine':'')+'"><b>'+E(m.first_name+' '+m.last_name)+'</b><p class="preserve">'+E(m.content)+'</p><small>'+E(m.created_at)+'</small></article>').join('')+'</div>'+
   (selected||group?'<form method="post" action="/chat" class="form"><textarea name="content" rows="3" maxlength="2500" required placeholder="Escribe aquí..."></textarea>'+
@@ -103,23 +108,34 @@ function sendChat(req,body,api){
   api.redirect(req,'/chat?con='+target.id);return;
  }
  const group=get('SELECT * FROM mobility_groups WHERE id=?',groupId);
- if(!group||(!isAdmin(user)&&!get('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',groupId,user.id))){
+  if(!group||(!isAdmin(user)&&(!get('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',groupId,user.id)||
+   group.edition_id!==editionForUser(user)?.id))){
   conversation(req,api,'No perteneces a ese grupo.');return;
  }
  const id=Number(run('INSERT INTO messages(sender_id,group_id,content) VALUES (?,?,?)',user.id,groupId,text).lastInsertRowid);
  audit(user.id,'chat_group_message_sent',id);
  api.redirect(req,'/chat?grupo='+groupId);
 }
-function groupsPage(req,api,notice=''){
- const groups=all('SELECT * FROM mobility_groups ORDER BY id DESC'),users=all("SELECT id,role,first_name,last_name FROM users WHERE status='approved' AND role!='coordinator' ORDER BY first_name");
+function groupsPage(req,api,notice='',selectedEditionId=null){
+  const editions=all('SELECT id,label FROM erasmus_editions ORDER BY label DESC');
+  const requested=validId(selectedEditionId||new URL(req.url,'http://localhost').searchParams.get('edicion'));
+  const selected=editions.find(edition=>edition.id===requested)||editions.find(edition=>edition.id===activeEdition()?.id)||editions[0]||null;
+  const groups=selected?all('SELECT g.*,e.label AS edition_label FROM mobility_groups g JOIN erasmus_editions e ON e.id=g.edition_id WHERE g.edition_id=? ORDER BY g.id DESC',selected.id):[];
+  const users=selected?all("SELECT id,role,first_name,last_name FROM users WHERE status='approved' AND role!='coordinator' AND edition_id=? ORDER BY first_name",selected.id):[];
  let out=heading('COORDINACIÓN · MOVILIDADES','Gestión de grupos','Crea los grupos y asigna docentes acompañantes y alumnado.');
  if(notice)out+=panel('Resultado',E(notice));
+  out+='<form class="card form" method="get" action="/coordinacion/grupos"><label>Convocatoria'+
+   '<select name="edicion">'+editions.map(edition=>'<option value="'+edition.id+'"'+(selected?.id===edition.id?' selected':'')+'>'+E(edition.label)+'</option>').join('')+
+   '</select></label><button class="btn secondary" type="submit">Consultar grupos</button></form>';
  out+='<form class="card form" method="post" action="/coordinacion/grupos"><h2>Crear grupo</h2>'+
  '<label>Nombre'+input('name')+'</label><label>Destino'+select('destination',['Viseu','Oporto','Róterdam'])+'</label>'+
- '<label>Modalidad'+select('type',['short','long','shadowing'])+'</label>'+formEnd(api.csrf(req),'Crear grupo');
+  '<label>Modalidad'+select('type',['short','long','shadowing'])+'</label>'+
+  '<label>Convocatoria<select name="edition_id">'+editions.map(edition=>'<option value="'+edition.id+'"'+(selected?.id===edition.id?' selected':'')+'>'+E(edition.label)+'</option>').join('')+
+  '</select></label>'+formEnd(api.csrf(req),'Crear grupo');
+  if(!selected)out+=panel('Sin convocatorias','<p>Crea una convocatoria antes de crear grupos.</p>');
  for(const g of groups){
-  const members=all('SELECT u.id,u.first_name,u.last_name,u.role FROM group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=?',g.id);
-  out+=panel(g.name+' · '+g.destination,
+   const members=all('SELECT u.id,u.first_name,u.last_name,u.role FROM group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=? AND u.edition_id=?',g.id,g.edition_id);
+   out+=panel(g.name+' · '+g.destination+' · '+g.edition_label,
   '<p>Participantes: '+members.map(m=>E(m.first_name+' '+m.last_name)+' ('+E(m.role)+')').join(', ')+'</p>'+
   '<form class="form" method="post" action="/coordinacion/grupos/asignar">'+
   '<input type="hidden" name="group_id" value="'+g.id+'">'+
@@ -130,18 +146,21 @@ function groupsPage(req,api,notice=''){
  api.layout(req,'Gestión de grupos',out);
 }
 function groupsPost(req,body,api){
- const name=clean(body.name,130),dest=clean(body.destination),type=clean(body.type);
- if(!name||!['Viseu','Oporto','Róterdam'].includes(dest)||!['short','long','shadowing'].includes(type)){groupsPage(req,api,'Nombre, destino o tipo incorrectos.');return;}
- const id=Number(run('INSERT INTO mobility_groups(name,destination,type) VALUES (?,?,?)',name,dest,type).lastInsertRowid);
- audit(req.auth.user.id,'group_created',id);groupsPage(req,api,'Grupo creado.');
+ const name=clean(body.name,130),dest=clean(body.destination),type=clean(body.type),editionId=validId(body.edition_id);
+ if(!name||!['Viseu','Oporto','Róterdam'].includes(dest)||!['short','long','shadowing'].includes(type)||!editionId||!get('SELECT id FROM erasmus_editions WHERE id=?',editionId)){
+  groupsPage(req,api,'Nombre, destino, modalidad o convocatoria incorrectos.',editionId);return;
+ }
+ const id=Number(run('INSERT INTO mobility_groups(name,destination,type,edition_id) VALUES (?,?,?,?)',name,dest,type,editionId).lastInsertRowid);
+ audit(req.auth.user.id,'group_created',id);groupsPage(req,api,'Grupo creado.',editionId);
 }
 function assignMember(req,body,api){
  const id=validId(body.group_id),uid=validId(String(body.user_id||'').split('|')[0]);
  const g=id&&get('SELECT * FROM mobility_groups WHERE id=?',id),u=uid&&get("SELECT * FROM users WHERE id=? AND status='approved' AND role!='coordinator'",uid);
- if(!g||!u){groupsPage(req,api,'Grupo o usuario no encontrado o sin aprobar.');return;}
+ if(!g||!u){groupsPage(req,api,'Grupo o usuario no encontrado o sin aprobar.',g?.edition_id);return;}
+ if(u.edition_id!==g.edition_id){groupsPage(req,api,'El participante y el grupo deben pertenecer a la misma convocatoria.',g.edition_id);return;}
  run('INSERT OR IGNORE INTO group_members(group_id,user_id) VALUES (?,?)',id,uid);
  audit(req.auth.user.id,'group_member_added',uid);
- groupsPage(req,api,'Participante incorporado al grupo.');
+ groupsPage(req,api,'Participante incorporado al grupo.',g.edition_id);
 }
 
 function supervisor(req,api){

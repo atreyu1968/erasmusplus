@@ -1,5 +1,5 @@
 import {db,get,all,run,audit} from './db.mjs';
-import {escape as E,clean,validId,heading,panel,datatable,queueMail} from './feature-service.mjs';
+import {escape as E,clean,validId,heading,panel,datatable,queueMail,editionForUser} from './feature-service.mjs';
 
 db.exec(
  "CREATE TABLE IF NOT EXISTS mobility_events ("+
@@ -21,11 +21,15 @@ db.exec(
 );
 const eventLabel={activity:'Actividad formativa',deadline:'Plazo',travel:'Desplazamiento',meeting:'Reunión'};
 function myGroups(u){
- return u.role==='coordinator'?all("SELECT * FROM mobility_groups ORDER BY id DESC"):
- all("SELECT g.* FROM mobility_groups g JOIN group_members gm ON gm.group_id=g.id WHERE gm.user_id=? ORDER BY g.id DESC",u.id);
+ return u.role==='coordinator'?all(
+  'SELECT g.*,e.label AS edition_label FROM mobility_groups g JOIN erasmus_editions e ON e.id=g.edition_id ORDER BY g.id DESC'):
+ all("SELECT g.*,e.label AS edition_label FROM mobility_groups g JOIN erasmus_editions e ON e.id=g.edition_id "+
+  "JOIN group_members gm ON gm.group_id=g.id WHERE gm.user_id=? AND g.edition_id=? ORDER BY g.id DESC",
+  u.id,editionForUser(u)?.id||null);
 }
 function canSee(u,groupId){return u.role==='coordinator'||Boolean(get(
- 'SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',groupId,u.id));}
+ 'SELECT 1 FROM group_members gm JOIN mobility_groups g ON g.id=gm.group_id '+
+ 'WHERE gm.group_id=? AND gm.user_id=? AND g.edition_id=?',groupId,u.id,editionForUser(u)?.id||null));}
 function validDate(s){
  return /^\d{4}-\d{2}-\d{2}$/.test(s||'')&&!Number.isNaN(Date.parse(s+'T00:00:00Z'))&&
  new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s;
@@ -45,25 +49,25 @@ function listing(req,api){
   'Consulta actividades, plazos y tareas de los grupos de movilidad en los que participas.');
  if(groups.length){
   html+='<div class="dest-grid">'+groups.map(g=>
-   '<article class="card"><span class="eyebrow">'+E(g.type)+' · '+E(g.destination)+'</span>'+
+   '<article class="card"><span class="eyebrow">'+E(g.edition_label)+' · '+E(g.type)+' · '+E(g.destination)+'</span>'+
    '<h2>'+E(g.name)+'</h2><p>Agenda de la movilidad, actividades y compromisos.</p>'+
    '<a class="btn" href="/agenda/grupo/'+g.id+'">Ver planificación</a></article>').join('')+'</div>';
  }else html+=panel('Sin grupos asignados','<p>Cuando coordinación confirme los grupos de la convocatoria, aparecerán aquí las actividades y los plazos correspondientes.</p>');
  api.layout(req,'Agenda Erasmus+',html);
 }
 function groupPage(req,api,id,msg=''){
- const g=get('SELECT * FROM mobility_groups WHERE id=?',id);
+  const g=get('SELECT g.*,e.label AS edition_label FROM mobility_groups g JOIN erasmus_editions e ON e.id=g.edition_id WHERE g.id=?',id);
  if(!g||!canSee(req.auth.user,id)){api.error(req,404,'No existe el grupo o no tienes autorización.');return;}
  const admin=req.auth.user.role==='coordinator',u=req.auth.user,csrf=E(api.csrf(req));
  const events=all('SELECT * FROM mobility_events WHERE group_id=? ORDER BY start_time,id',id);
  const tasks=all("SELECT t.*,c.completed_at AS my_completed FROM mobility_tasks t "+
  "LEFT JOIN mobility_task_completions c ON c.task_id=t.id AND c.user_id=? WHERE t.group_id=? ORDER BY CASE WHEN t.due_date IS NULL THEN 1 ELSE 0 END,t.due_date,t.id",u.id,id);
- const members=all("SELECT u.id,u.first_name,u.last_name,u.role FROM users u "+
- "JOIN group_members gm ON gm.user_id=u.id WHERE gm.group_id=? ORDER BY u.role DESC,u.first_name",id);
- let html=heading('MOVILIDAD · '+g.destination,g.name,'Planificación orientativa y seguimiento de participantes.');
+  const members=all("SELECT u.id,u.first_name,u.last_name,u.role FROM users u "+
+  "JOIN group_members gm ON gm.user_id=u.id WHERE gm.group_id=? AND u.edition_id=? ORDER BY u.role DESC,u.first_name",id,g.edition_id);
+  let html=heading('CONVOCATORIA '+g.edition_label+' · '+g.destination,g.name,'Planificación orientativa y seguimiento de participantes.');
  if(msg)html+=panel('Resultado','<p>'+E(msg)+'</p>');
  html+=panel('Equipo y destino',
- '<p><b>Modalidad:</b> '+E(g.type)+' · <b>Destino:</b> '+E(g.destination)+'</p>'+
+  '<p><b>Convocatoria:</b> '+E(g.edition_label)+' · <b>Modalidad:</b> '+E(g.type)+' · <b>Destino:</b> '+E(g.destination)+'</p>'+
  '<p><b>Participantes:</b> '+E(members.map(x=>x.first_name+' '+x.last_name+' ('+(x.role==='teacher'?'docente':'alumnado')+')').join(' · ')||'Por asignar')+'</p>'+
  '<p><a href="/chat?grupo='+id+'">Abrir chat del grupo</a></p>');
  html+=panel('Calendario de actividades',
@@ -103,11 +107,12 @@ function groupPage(req,api,id,msg=''){
  api.layout(req,'Agenda del grupo',html);
 }
 function groupNotice(id,title,message){
- const people=all("SELECT u.institutional_email FROM users u JOIN group_members gm ON gm.user_id=u.id WHERE gm.group_id=? AND u.status='approved'",id);
+ const people=all("SELECT u.institutional_email FROM users u JOIN group_members gm ON gm.user_id=u.id "+
+  "JOIN mobility_groups g ON g.id=gm.group_id WHERE gm.group_id=? AND u.status='approved' AND u.edition_id=g.edition_id",id);
  for(const p of people)queueMail(p.institutional_email,title,message);
 }
 function newEvent(req,api,b){
- const id=validId(b.group_id),g=id&&get('SELECT id,name FROM mobility_groups WHERE id=?',id);
+  const id=validId(b.group_id),g=id&&get('SELECT id,name FROM mobility_groups WHERE id=?',id);
  if(!g){api.error(req,404,'Grupo no encontrado.');return;}
  const kind=String(b.kind||''),title=clean(b.title,150),description=clean(b.description,1500),
   location=clean(b.location,180),start=clean(b.start_time,16),end=clean(b.end_time,16);

@@ -49,6 +49,7 @@ db.exec(
   "CHECK ((receiver_id IS NOT NULL AND group_id IS NULL) OR (receiver_id IS NULL AND group_id IS NOT NULL)));" +
   "CREATE TABLE IF NOT EXISTS mobility_groups ("+
   "id INTEGER PRIMARY KEY,name TEXT NOT NULL,destination TEXT NOT NULL,type TEXT NOT NULL CHECK(type IN ('short','long','shadowing')),"+
+  "edition_id INTEGER NOT NULL REFERENCES erasmus_editions(id),"+
   "created_at TEXT DEFAULT CURRENT_TIMESTAMP);" +
   "CREATE TABLE IF NOT EXISTS group_members ("+
   "group_id INTEGER NOT NULL REFERENCES mobility_groups(id) ON DELETE CASCADE,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,"+
@@ -83,6 +84,9 @@ if (!db.prepare('PRAGMA table_info(applications)').all().some(column=>column.nam
 }
 if (!db.prepare('PRAGMA table_info(users)').all().some(column=>column.name==='edition_id')) {
   db.exec('ALTER TABLE users ADD COLUMN edition_id INTEGER REFERENCES erasmus_editions(id)');
+}
+if (!db.prepare('PRAGMA table_info(mobility_groups)').all().some(column=>column.name==='edition_id')) {
+  db.exec('ALTER TABLE mobility_groups ADD COLUMN edition_id INTEGER REFERENCES erasmus_editions(id)');
 }
 
 if (!db.prepare('SELECT 1 FROM app_migrations WHERE name=?').get('seed-erasmus-editions-v1')) {
@@ -138,6 +142,25 @@ const activeEdition=db.prepare('SELECT id FROM erasmus_editions WHERE is_active=
 if (activeEdition) {
   db.prepare('UPDATE applications SET edition_id=? WHERE edition_id IS NULL').run(activeEdition.id);
   db.prepare("UPDATE users SET edition_id=? WHERE role IN ('student','teacher') AND edition_id IS NULL").run(activeEdition.id);
+  const unassignedGroups=db.prepare('SELECT id FROM mobility_groups WHERE edition_id IS NULL').all();
+  for (const group of unassignedGroups) {
+    const memberEditions=db.prepare(
+      'SELECT u.edition_id,COUNT(*) AS member_count FROM group_members gm JOIN users u ON u.id=gm.user_id '+
+      'WHERE gm.group_id=? AND u.edition_id IS NOT NULL GROUP BY u.edition_id ORDER BY member_count DESC,u.edition_id'
+    ).all(group.id);
+    const maxCount=memberEditions[0]?.member_count||0;
+    const leaders=memberEditions.filter(row=>row.member_count===maxCount);
+    const editionId=leaders.find(row=>row.edition_id===activeEdition.id)?.edition_id||
+      leaders[0]?.edition_id||activeEdition.id;
+    db.prepare('UPDATE mobility_groups SET edition_id=? WHERE id=? AND edition_id IS NULL').run(editionId,group.id);
+  }
 }
 db.exec('DROP INDEX IF EXISTS app_unique;');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS app_unique_per_edition ON applications(user_id,mobility,edition_id);');
+db.exec('CREATE INDEX IF NOT EXISTS mobility_groups_edition ON mobility_groups(edition_id,id);');
+db.exec(
+  "CREATE TRIGGER IF NOT EXISTS mobility_groups_require_edition_insert BEFORE INSERT ON mobility_groups "+
+  "WHEN NEW.edition_id IS NULL BEGIN SELECT RAISE(ABORT,'mobility group requires an edition'); END;"+
+  "CREATE TRIGGER IF NOT EXISTS mobility_groups_require_edition_update BEFORE UPDATE OF edition_id ON mobility_groups "+
+  "WHEN NEW.edition_id IS NULL BEGIN SELECT RAISE(ABORT,'mobility group requires an edition'); END;"
+);
