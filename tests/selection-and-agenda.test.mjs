@@ -99,6 +99,8 @@ test('Valoración manual y agenda: seguridad por perfil, grupo y CSRF',async()=>
   assert.equal(teacherAgenda.status,200);assert.match(teacherHtml,/Grupo Oporto/);
   const [teacherDenied]=await page('/agenda/grupo/1',unassignedTeacher);
   assert.equal(teacherDenied.status,404);
+  const [teacherChat,teacherChatHtml]=await page('/chat?grupo=1',assignedTeacher);
+  assert.equal(teacherChat.status,200);assert.match(teacherChatHtml,/Grupo: Grupo Oporto/);
   const [groupView,gh]=await page('/agenda/grupo/1',admin);
   const csrf=gh.match(/name="csrf" value="([a-f0-9]+)"/)?.[1];
   assert.ok(csrf);
@@ -127,6 +129,8 @@ test('Valoración manual y agenda: seguridad por perfil, grupo y CSRF',async()=>
   assert.equal(unassigned.status,0,unassigned.stderr);
   const [revokedAgenda]=await page('/agenda/grupo/1',assignedTeacher);
   assert.equal(revokedAgenda.status,404);
+  const [revokedChat]=await page('/chat?grupo=1',assignedTeacher);
+  assert.equal(revokedChat.status,404);
   const [revokedOverview,revokedOverviewHtml]=await page('/agenda',assignedTeacher);
   assert.equal(revokedOverview.status,200);
   assert.doesNotMatch(revokedOverviewHtml,/Grupo Oporto/);

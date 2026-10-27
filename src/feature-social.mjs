@@ -63,7 +63,9 @@ function conversation(req,api,msg=''){
  let group=null;
  if(groupId){
   group=get('SELECT * FROM mobility_groups WHERE id=?',groupId);
-  if(group&&!isAdmin(user)&&!get('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',groupId,user.id))group=null;
+  if(!group||(!isAdmin(user)&&!get('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',groupId,user.id))){
+   api.error(req,404,'No existe el grupo o no tienes autorización.');return;
+  }
  }
  const direct=selected?all("SELECT m.*,u.first_name,u.last_name FROM messages m JOIN users u ON u.id=m.sender_id WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?) ORDER BY m.id DESC LIMIT 100",
    user.id,selected.id,selected.id,user.id).reverse():[];
