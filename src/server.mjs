@@ -32,7 +32,7 @@ function field(label,name,{type='text',required=false,placeholder='',value='',ex
 function postButton(label,action,token,extras='') {
   return '<form method="post" action="'+action+'"><input type="hidden" name="csrf" value="'+X(token)+'">'+extras+'<button class="btn small" type="submit">'+X(label)+'</button></form>';
 }
-const nav=[['/panel','⌂','Inicio'],['/candidatura','▤','Candidatura Erasmus'],['/destinos','⌖','Destinos Erasmus'],['/movilidades','✈','Tipos de movilidad'],['/normativa','§','Normativa Erasmus'],['/compromisos','✓','Compromisos'],['/notificaciones','♧','Notificaciones'],['/documentos','▣','Documentación'],['/chat','✉','Chat interno'],['/perfil','♙','Mi perfil']];
+const nav=[['/panel','⌂','Inicio'],['/candidatura','▤','Candidatura Erasmus'],['/destinos','⌖','Destinos Erasmus'],['/movilidades','✈','Tipos de movilidad'],['/normativa','§','Normativa Erasmus'],['/compromisos','✓','Compromisos'],['/notificaciones','♧','Notificaciones'],['/documentos','▣','Documentación'],['/chat','✉','Chat interno'],['/perfil','♙','Mi perfil'],['/passkeys','◎','Acceso biométrico']];
 function layout(req,title,main,{publicPage=false,status=200}={}){
   const user=req.auth?.user;
   const current=req.url.split('?')[0];
@@ -66,7 +66,7 @@ function landing(req){
 function login(req,msg=''){
  layout(req,'Acceso','<div class="form-container"><p class="eyebrow">ÁREA PERSONAL</p><h1>Iniciar sesión</h1><p>Solo las cuentas con correo verificado y aprobadas por coordinación podrán acceder.</p>'+ (msg?formAlert(msg):'')+
  '<form class="card form" method="post" action="/acceso"><input type="hidden" name="csrf" value="'+csrf(req)+'">'+field('DNI (docentes) o CIAL (alumnado)','username',{required:true,extra:'autocomplete="username"'})+
- field('Contraseña','password',{type:'password',required:true,extra:'autocomplete="current-password"'})+'<button class="btn" type="submit">Acceder</button></form><p><a href="/registro">Solicitar una cuenta</a> · <a href="/reenviar">Reenviar verificación de correo</a></p></div>',{publicPage:true});
+ field('Contraseña','password',{type:'password',required:true,extra:'autocomplete="current-password"'})+'<button class="btn" type="submit">Acceder con contraseña</button><button class="btn secondary" type="button" id="loginPasskey">Entrar con passkey</button><p id="passkeyStatus" role="status"></p></form><p><a href="/registro">Solicitar una cuenta</a> · <a href="/reenviar">Reenviar verificación de correo</a></p></div>',{publicPage:true});
 }
 function registration(req,msg=''){
  const open=isRegistrationOpen() && settings().configured;
@@ -290,7 +290,7 @@ async function handler(req,res){
   const u=new URL(req.url,'http://localhost');
   const url=u.pathname;
   req.auth=authFromRequest(req);
-  if(req.method==='GET'&&['/styles.css','/manifest.webmanifest','/icon.svg','/pwa.js','/sw.js'].includes(url)){
+  if(req.method==='GET'&&['/styles.css','/manifest.webmanifest','/icon.svg','/pwa.js','/sw.js','/passkeys.js'].includes(url)){
     const name=url.slice(1);
     const data=await readFile(new URL('../public/'+name,import.meta.url));
     header(req,200,url.endsWith('.css')?'text/css; charset=utf-8':url.endsWith('.js')?'text/javascript; charset=utf-8':url.endsWith('.svg')?'image/svg+xml':'application/manifest+json; charset=utf-8',url==='/sw.js'?{'Service-Worker-Allowed':'/'}:{});
