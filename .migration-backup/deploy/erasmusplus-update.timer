@@ -1,0 +1,12 @@
+[Unit]
+Description=Comprobación diaria de actualizaciones Erasmus+ MMG
+
+[Timer]
+OnCalendar=*-*-* 04:25:00
+RandomizedDelaySec=15min
+AccuracySec=5min
+Persistent=false
+Unit=erasmusplus-update.service
+
+[Install]
+WantedBy=timers.target

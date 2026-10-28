@@ -1,0 +1,311 @@
+# Movilidades Erasmus+ MMG
+
+Aplicación de gestión Erasmus+ del **IES Manuel Martín González (Guía de Isora, Tenerife)**. Node.js 24, SQLite, Resend, interfaz adaptable y PWA. Repositorio público de código; **nunca** almacena datos reales, bases SQLite o secretos en GitHub.
+
+> **Estado:** versión de desarrollo para pruebas con datos ficticios. No abrir registros de alumnado real sin revisión técnica, autorización del centro y validación de protección de datos. El instalador deja el registro cerrado y las actualizaciones automáticas sin aplicar hasta su autorización.
+
+## Si el instalador detecta Ubuntu 25.04
+
+El instalador bloquea deliberadamente Ubuntu **25.04**, que está fuera de soporte de seguridad desde el **15 de enero de 2026**. No es un error de instalación ni se soluciona ignorando la versión. Ubuntu 25.10 también ha agotado su soporte (9 de julio de 2026).
+
+**Solución recomendada:** preparar Ubuntu Server **26.04 LTS**, migrar con seguridad el Cloudflare Tunnel y los servicios del equipo y, después, instalar Erasmus+ MMG con los comandos de la sección siguiente. Si no es posible reinstalar, el camino secuencial 25.04 → 25.10 → 26.04 debe realizarse con respaldo, consola de recuperación y supervisión de TIC.
+
+**[Guía de migración desde Ubuntu 25.04, con pasos para conservar Cloudflare Tunnel](docs/MIGRACION_UBUNTU_25_04.md).**
+
+## Solución a `EACCES` durante las pruebas de instalación
+
+Si el instalador llega a `Node.js 24` y después termina con `npm error EACCES` al intentar leer `/opt/erasmusplus/releases/.prepare.*/package.json`, se trata de **un error de permisos del instalador anterior**, no de Ubuntu ni de tu cuenta.
+
+**Corregido en GitHub:** el script ahora concede permisos de lectura y acceso a todos los archivos y subdirectorios de la copia temporal antes de ejecutar las pruebas como usuario no privilegiado `nobody`. También se ha ajustado la recuperación para que no imprima dos veces el mismo error.
+
+## Cuentas y candidaturas ficticias para pruebas locales
+
+El registro público permanece cerrado. Para probar los perfiles de docente y alumnado, crea una carpeta temporal vacía y ejecuta el sembrado únicamente con el entorno de desarrollo:
+
+```sh
+export MMG_DATA_DIR="$(mktemp -d /tmp/mmg-test-candidaturas.XXXXXX)"
+export MMG_ENV=development MMG_ENABLE_REGISTRATION=0 MMG_TEST_FIXTURES=1
+npm run seed-test-accounts
+npm run seed-test-candidates
+```
+
+Los comandos solo aceptan una carpeta propia `mmg-test-*` dentro del directorio temporal del sistema y requieren desarrollo, registro cerrado y `MMG_TEST_FIXTURES=1`. El primero crea `TESTDOCENTE` y `TESTALUMNO`; el segundo añade cuatro candidaturas presentadas con sus PDF: las modalidades permitidas para cada perfil. Coordinación las revisa en `/coordinacion/candidaturas`. Para abrir la aplicación contra esa misma base, crea primero una cuenta de coordinación ficticia con `npm run init-admin`, definiendo temporalmente `MMG_ADMIN_USERNAME`, `MMG_ADMIN_EMAIL` (usa un correo `.invalid`) y `MMG_ADMIN_PASSWORD`; retira esas tres variables del entorno después del alta. Inicia la aplicación con las mismas variables `MMG_DATA_DIR`, `MMG_ENV`, `MMG_ENABLE_REGISTRATION` y `MMG_TEST_FIXTURES`.
+
+El sembrado de candidaturas es repetible: conserva los casos idénticos y sus valoraciones, y se detiene sin sobrescribir si detecta una candidatura distinta para las cuentas de prueba. Usa únicamente nombres y documentos ficticios, no envía correo y no configura Resend. En el modo `MMG_TEST_FIXTURES=1`, el formulario desmarca el aviso por defecto y el servidor no encola correos aunque se envíe explícitamente esa opción.
+
+Restricciones de seguridad: utiliza una carpeta temporal nueva, no enlaces ni copias de bases reales; mantén `MMG_ENABLE_REGISTRATION=0`; no copies datos personales ni credenciales de producción; y no apuntes `MMG_DATA_DIR` a `data/`, una base persistente ni a ningún entorno compartido. Las pruebas automatizadas verifican el rechazo de rutas no temporales, producción y registro abierto, así como la revisión de los cuatro casos y la descarga de sus PDF.
+
+Cuando termines, detén la aplicación y elimina **solo la ruta temporal que creaste** (comprueba antes el valor de `MMG_DATA_DIR`):
+
+```sh
+printf '%s\n' "$MMG_DATA_DIR"
+case "$MMG_DATA_DIR" in /tmp/mmg-test-*) rm -rf -- "$MMG_DATA_DIR" ;; *) echo "Ruta no autorizada; no se eliminó nada." >&2; exit 1 ;; esac
+unset MMG_DATA_DIR MMG_ENV MMG_ENABLE_REGISTRATION MMG_TEST_FIXTURES
+```
+
+Si el primer intento falló antes de arrancar la aplicación, **no borres** `/etc/erasmusplus`, `/var/lib/erasmusplus` ni las claves de respaldo. Reanuda en el mismo contenedor (si eres root puedes omitir `sudo`):
+
+```bash
+cd /root/erasmusplus
+git pull --ff-only
+bash deploy/install-ubuntu.sh
+```
+
+El instalador reutiliza la cuenta de servicio, la clave y el archivo de configuración ya creados. Cuando termine correctamente:
+
+```bash
+curl -fsS http://127.0.0.1:3000/healthz
+systemctl status erasmusplus --no-pager
+/usr/local/sbin/erasmusplus-init-admin
+```
+
+La respuesta de salud debe ser `ok`. El asistente de coordinación es idempotente: si ya existe un coordinador, no vuelve a pedir datos ni crea otra cuenta. La instalación inicial mantiene el registro de usuarios deshabilitado; el acceso externo desde otro contenedor Proxmox mediante Cloudflare se configura después con la IP privada de Ubuntu.
+
+## Instalación confirmada: contenedor Ubuntu 26.04 en Proxmox
+
+El contenedor Erasmus+ MMG ya dispone de **Ubuntu 26.04 LTS**, con arquitectura x86_64. **Cloudflare Tunnel está en otro contenedor Proxmox**: es normal que no exista `cloudflared.service` dentro de Ubuntu. No reinstales el túnel.
+
+Si ya tienes un clon previo en `/root/erasmusplus`:
+
+```bash
+apt-get update
+apt-get install -y ca-certificates git curl
+cd /root/erasmusplus
+git pull --ff-only
+bash deploy/install-ubuntu.sh
+```
+
+Si no existe ese repositorio, usa `git clone https://github.com/atreyu1968/erasmusplus.git` desde `/root`, entra en `erasmusplus` y ejecuta `bash deploy/install-ubuntu.sh`.
+
+Tras instalar, el instalador comprueba si existe el coordinador y solicita sus datos por terminal solo si falta. Comprueba `curl -fsS http://127.0.0.1:3000/healthz`, configura `HOST` con la IP privada real del Ubuntu y limita TCP 3000 a la IP del contenedor Cloudflare. La ruta Cloudflare debe usar **`http://IP_PRIVADA_UBUNTU:3000`**, no `127.0.0.1`.
+
+El procedimiento y el ejemplo de cortafuegos están en [Cloudflare Tunnel en otro contenedor Proxmox](deploy/CLOUDFLARE_TUNNEL.md).
+
+## 1. Instalación desde cero en Ubuntu, aunque no tenga Git ni cURL
+
+**Requisitos:** Ubuntu Server 22.04, 24.04 o 26.04 LTS de 64 bits (`amd64`/`arm64`), acceso administrativo `sudo`, `apt` operativo, Internet saliente por HTTPS y systemd. No se admiten versiones sin soporte estándar como Ubuntu 20.04: debe actualizarse o migrarse con el equipo TIC. El túnel **Cloudflare Tunnel ya instalado** se conserva tal como está.
+
+Antes de instalar, comprobar versión y espacio disponible:
+
+```bash
+cat /etc/os-release
+df -h
+# cloudflared funciona en otro contenedor Proxmox; no debe aparecer aquí
+```
+
+El servidor está desactualizado: **realizar una instantánea o copia de seguridad previa** y coordinar con TIC la actualización del sistema operativo. El instalador solo ejecuta `apt-get update` e instala los paquetes necesarios; **no ejecuta silenciosamente un `dist-upgrade`, no reinicia Ubuntu y no altera el túnel existente**. Para revisar actualizaciones del sistema de manera separada:
+
+```bash
+sudo apt-get update
+sudo apt-get upgrade
+```
+
+Si APT falla debido a repositorios antiguos o certificados caducados, resolverlo antes de continuar. Consultar posibles reinicios y comprobar que `cloudflared` sigue funcionando después de actualizar Ubuntu.
+
+### Descargar el instalador sin disponer previamente de Git ni cURL
+
+Ejecutar en una terminal Ubuntu con un usuario autorizado a utilizar `sudo`:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates git curl
+git clone https://github.com/atreyu1968/erasmusplus.git
+cd erasmusplus
+sudo bash deploy/install-ubuntu.sh
+```
+
+Los dos primeros comandos instalan precisamente las herramientas que faltan. **No hay que ejecutar código descargado directamente con `curl | bash`.** Se descarga el repositorio, se puede revisar `deploy/install-ubuntu.sh` y después se ejecuta. Si se prefiere, se puede copiar el repositorio al servidor desde un equipo de administración.
+
+El instalador realiza automáticamente estas operaciones:
+
+1. Verifica Ubuntu y actualiza índices APT; instala `git`, `curl`, certificados, GnuPG, `age`, OpenSSL y herramientas de actualización en modo no interactivo, conservando los archivos de configuración locales.
+2. Instala **Node.js 24** mediante el repositorio APT firmado de NodeSource, si no existe una versión adecuada. Usa su clave GPG y comprueba la versión al terminar.
+3. Crea el usuario limitado `erasmusmmg`, las carpetas privadas y los servicios `systemd`.
+4. Genera `MMG_SECRET` aleatorio y conserva cualquier configuración privada ya existente.
+5. Crea claves `age` para cifrar las copias de seguridad; **guarda una copia offline** de la clave privada bajo custodia institucional.
+6. Descarga el código, verifica sintaxis, instala dependencias mediante `npm ci` y ejecuta las pruebas automáticas antes de activar el servicio.
+7. Instala el actualizador diario, inicialmente en modo **sin aplicación automática** por seguridad.
+8. Comprueba si existe una cuenta de coordinación y solicita los datos solo si hace falta.
+
+### Alta de la primera cuenta de coordinación
+
+```bash
+sudo /usr/local/sbin/erasmusplus-init-admin
+```
+
+En una instalación nueva, el instalador ejecuta este asistente después de comprobar que el servicio está operativo. Solicita identificador, correo institucional y contraseña (oculta mientras se escribe y confirmada dos veces). No guarda los datos en archivos de configuración. Si ya existe un coordinador, no solicita nada ni crea otra cuenta.
+
+La instalación y actualización no requieren respuestas de APT ni reinician el servidor. Si se ejecutan sin terminal y todavía no existe un coordinador, deben recibir `MMG_ADMIN_USERNAME`, `MMG_ADMIN_EMAIL` y `MMG_ADMIN_PASSWORD` desde un gestor de secretos; no incluyas contraseñas en argumentos de comandos ni en archivos del repositorio. Al usar `sudo`, conserva solo esas variables de entorno, por ejemplo:
+
+```bash
+sudo --preserve-env=MMG_ADMIN_USERNAME,MMG_ADMIN_EMAIL,MMG_ADMIN_PASSWORD bash deploy/install-ubuntu.sh
+```
+
+Sin terminal ni esos datos, el instalador inicial se detiene antes de modificar el sistema y el actualizador se detiene antes de cambiar la aplicación. El alta manual sigue disponible ejecutando el asistente anterior en una terminal.
+
+### Comprobar el servicio
+
+```bash
+sudo systemctl status erasmusplus --no-pager
+curl -fsS http://127.0.0.1:3000/healthz
+sudo journalctl -u erasmusplus -n 60 --no-pager
+```
+
+El control de salud debe devolver `ok`. **Node solo escucha en `127.0.0.1:3000`: no abrir el puerto 3000 al exterior.**
+
+## 2. Acceso mediante tu Cloudflare Tunnel existente
+
+En Cloudflare Zero Trust, selecciona el túnel del **otro contenedor Proxmox** y crea una **ruta de aplicación publicada** para el subdominio institucional aprobado. El destino será la dirección privada del Ubuntu Erasmus+:
+
+```text
+http://IP_PRIVADA_UBUNTU:3000
+```
+
+Configura `HOST=IP_PRIVADA_UBUNTU` en `/etc/erasmusplus/erasmusplus.env`, reinicia el servicio y comprueba conectividad desde el contenedor donde está cloudflared. Restringe el cortafuegos del guest a la IP del contenedor cloudflared. Consulta [la guía específica de Proxmox](deploy/CLOUDFLARE_TUNNEL.md).
+
+El usuario navegará por `https://TU-SUBDOMINIO-INSTITUCIONAL`. El dominio ilustrativo debe sustituirse por el autorizado. Cloudflare establece la conexión saliente desde `cloudflared`; no es necesario Nginx ni abrir puertos en el router. En esta instalación el tráfico interno entre ambos contenedores debe quedar restringido a la red privada autorizada de Proxmox.
+
+**No permitir el acceso de estudiantes a la aplicación ni activar el registro antes de validar el tratamiento de datos.** Conviene proteger rutas administrativas mediante Cloudflare Access cuando el procedimiento de autenticación lo permita.
+
+Guía: [deploy/CLOUDFLARE_TUNNEL.md](deploy/CLOUDFLARE_TUNNEL.md).
+
+## 3. Resend y configuración privada
+
+La cuenta de Coordinación dispone de **Configurar Resend**: introducir API Key, dirección remitente de un dominio verificado y URL HTTPS pública de la aplicación. La API Key se guarda cifrada en SQLite y nunca en el repositorio. Resend no sustituye la aprobación manual del coordinador.
+
+El archivo principal de configuración se encuentra **solo en el servidor**:
+
+```bash
+sudo nano /etc/erasmusplus/erasmusplus.env
+sudo systemctl restart erasmusplus
+```
+
+Está protegido con permisos `0600` y propietario root. El instalador mantiene por defecto `MMG_ENABLE_REGISTRATION=0` y `MMG_PRIVACY_VERSION=PENDIENTE_REVISION`. El responsable y DPD deberán aprobar los campos `MMG_PRIVACY_*` antes de permitir solicitudes reales. Usar comillas para valores de configuración que contengan espacios y no modificar `MMG_SECRET` sin plan de rotación.
+
+Para WebAuthn/passkeys, completar `MMG_PASSKEY_RPID` y `MMG_PASSKEY_ORIGIN` con el dominio público HTTPS definitivo.
+
+## 4. Actualización automática de la aplicación
+
+Se instala un timer `systemd` que **comprueba diariamente, aproximadamente a las 04:25 según la hora local del servidor**, si hay cambios en `main` de GitHub. Se añade un retraso aleatorio de hasta 15 minutos.
+
+**Por defecto no instala automáticamente versiones nuevas**, porque el proyecto sigue en desarrollo y la rama `main` no es todavía un canal de versiones certificadas. Una vez realizadas las pruebas de funcionamiento, revisión de seguridad y aprobación del procedimiento de cambios, el administrador podrá habilitar la aplicación automática:
+
+```bash
+sudo nano /etc/erasmusplus/updater.conf
+```
+
+Cambiar `MMG_AUTO_UPDATE=0` por `MMG_AUTO_UPDATE=1`. No modificar el resto de la configuración. El timer ya queda habilitado. Para ejecutar una actualización manual y supervisar el resultado:
+
+```bash
+sudo /usr/local/sbin/erasmusplus-update
+sudo systemctl status erasmusplus-update.timer --no-pager
+sudo journalctl -u erasmusplus-update.service -n 100 --no-pager
+```
+
+**Cómo se actualiza:** Git descarga el código nuevo por HTTPS; `npm ci` usa las versiones fijadas en `package-lock.json`; se verifican sintaxis y pruebas; solo después se detiene brevemente el servicio, se crea una copia de seguridad cifrada `age` de SQLite y documentos, se cambia la versión de forma atómica y se comprueba `http://127.0.0.1:3000/healthz`. Si falla el arranque o la salud, se intenta **restaurar código y datos anteriores**. Los fallos y cambios se reflejan en `journalctl`.
+
+Para impedir las actualizaciones programadas, volver a `MMG_AUTO_UPDATE=0`; para detener incluso la comprobación diaria:
+
+```bash
+sudo systemctl disable --now erasmusplus-update.timer
+```
+
+Una actualización automática toma la rama `main`; por ello es imprescindible proteger la rama, revisar las contribuciones y exigir CI satisfactorio. **No activar despliegues automáticos sobre expedientes reales mientras la aplicación no supere su auditoría de seguridad.** El actualizador no realiza actualizaciones de sistema operativo ni reinicios del servidor.
+
+El actualizador no espera entrada interactiva. Si detecta que falta la cuenta de coordinación, cancela la actualización antes de cambiar la versión; el administrador puede crearla manualmente en una terminal o ejecutar el actualizador con los tres datos inyectados desde un gestor de secretos.
+
+## 5. Datos y copias de seguridad
+
+| Elemento | Ruta en Ubuntu |
+| --- | --- |
+| Versión activa del programa | `/opt/erasmusplus/current` |
+| Versiones del código | `/opt/erasmusplus/releases/` |
+| SQLite y documentos privados | `/var/lib/erasmusplus/` |
+| Configuración y secretos | `/etc/erasmusplus/erasmusplus.env` |
+| Clave privada para restaurar backups | `/etc/erasmusplus/backup-identity.txt` |
+| Copias cifradas anteriores a actualizaciones | `/var/backups/erasmusplus/` |
+| Configuración del actualizador | `/etc/erasmusplus/updater.conf` |
+
+Las copias creadas en cada actualización se cifran con **age** y se conservan localmente un máximo aproximado de 14 días. Esto **no sustituye** una política de backups diarios, externos y ensayos de restauración. Guardar **fuera del servidor**, de forma segura y separada, la clave privada `backup-identity.txt` y una copia de la configuración. Si se pierde la clave de recuperación no será posible descifrar las copias. Un responsable TIC deberá verificar periódicamente la restauración en un entorno aislado.
+
+## 6. Guía de uso y funciones de la aplicación
+
+Esta guía describe las funciones disponibles en la versión actual. La aplicación continúa en desarrollo: no introduzcas datos personales reales hasta completar la revisión técnica, institucional y de protección de datos descrita más abajo.
+
+### Acceso y alta de cuentas
+
+- **Visitas sin cuenta:** la portada `/` presenta las movilidades Erasmus+ y los destinos publicados para la edición vigente. Usa **Conoce la convocatoria** para abrir `/registro` o **Acceso a participantes** para ir a `/acceso`.
+- **Registro:** solo se aceptan altas cuando hay una convocatoria vigente, el registro está abierto y coordinación ha configurado Resend y aprobado el aviso de privacidad. El correo debe ser institucional `@canariaseducacion.es`. El usuario de docentes es su DNI; el del alumnado, su CIAL. El registro vincula la cuenta a la convocatoria vigente en ese momento.
+- **Verificación y aprobación:** la persona usuaria confirma el correo recibido. La cuenta no puede iniciar sesión hasta que coordinación también la apruebe. Si no llega el correo, utiliza **Reenviar verificación**; consulta con coordinación si el registro aparece deshabilitado.
+- **Protección de datos de menores:** las personas adultas registran electrónicamente que han recibido y leído el aviso. Para menores de 18 años, la persona representante legal debe completar y subir el modelo PDF recibido por correo. Coordinación revisa la documentación antes de aprobar la cuenta.
+- **Inicio y recuperación:** accede con DNI o CIAL y contraseña en `/acceso`. En caso de pérdida de contraseña, solicita un enlace en **Restablecer contraseña**. Las passkeys son opcionales y solo estarán disponibles si se han configurado.
+
+### Alumnado y profesorado
+
+Después de iniciar sesión, el panel `/panel` muestra la convocatoria asignada, las candidaturas, los grupos, las tareas pendientes, los avisos y las próximas actividades.
+
+#### Presentar una candidatura
+
+1. Abre **Candidatura Erasmus** desde el menú.
+2. Selecciona una modalidad, familia profesional y destino disponibles para la edición vigente; completa la motivación (mínimo 30 caracteres).
+3. El alumnado indica también si tiene beca MEC. Las modalidades elegibles dependen del perfil: alumnado puede solicitar movilidad corta o larga; docentes, movilidad corta o Job Shadowing. Además, coordinación debe haber habilitado la modalidad para ese destino y convocatoria.
+4. Elige **Guardar borrador** para continuar más tarde o **Presentar candidatura** para entregar la solicitud.
+5. Al presentar, se genera un PDF privado que refleja las respuestas entregadas. La candidatura presentada no se puede modificar desde el formulario; si detectas un error, contacta con coordinación.
+
+Solo se puede presentar si la cuenta pertenece a la convocatoria vigente. Cambiar de curso no traslada automáticamente las cuentas ni las candidaturas anteriores; coordinación debe revisar la asignación.
+
+#### Otras funciones personales
+
+- **Destinos, modalidades y normativa:** consulta destinos, información general del programa, modalidades y referencias de viaje disponibles para tu convocatoria.
+- **Agenda y tareas:** abre una movilidad asignada para consultar actividades, fechas, lugares e instrucciones. Marca una tarea como realizada cuando la hayas completado; coordinación puede consultar el avance del grupo.
+- **Compromisos:** lee el texto de participación y, si procede, registra el acuse electrónico. Se genera un PDF. Este acuse es informativo y no sustituye una autorización parental, una firma cualificada ni otros documentos exigidos.
+- **Documentación:** consulta los PDF de tus candidaturas y compromisos, y los documentos que hayas adjuntado. Puedes entregar archivos PDF, JPG, PNG, WEBP o DOCX de hasta 6 MB; coordinación podrá consultarlos.
+- **Notificaciones:** lee avisos destinados a todo el mundo o específicamente a alumnado o docentes, y descarga sus adjuntos.
+- **Chat interno:** escribe a coordinación o a personas autorizadas de tus grupos. Las conversaciones pueden ser supervisadas por coordinación según el protocolo del centro; los accesos quedan registrados.
+- **Mi perfil:** actualiza teléfono, centro y datos académicos. El alumnado también puede actualizar el teléfono familiar y el correo Gmail. Para cambiar la contraseña, usa la recuperación por correo.
+
+### Coordinación
+
+El menú de coordinación solo aparece para cuentas con ese perfil. La página **Control de cuentas** permite consultar participantes, convocatoria asignada, verificación de correo, estado y documentación pendiente.
+
+#### Preparar una nueva convocatoria
+
+1. En **Ediciones y destinos**, crea una edición académica. Se crea inactiva para poder prepararla sin cambiar la convocatoria vigente.
+2. Añade sus destinos y configura modalidades y familias profesionales disponibles. Los destinos archivados se conservan para mantener el historial.
+3. Cuando la edición tenga al menos un destino activo, pulsa **Activar**. La portada y el formulario de candidaturas mostrarán los destinos activos de la edición vigente.
+4. Aprueba las cuentas cuyo correo y trámite de privacidad estén verificados. Las cuentas existentes conservan su edición asignada aunque cambie la edición vigente; para moverlas, usa **Reasignar cuentas entre convocatorias**, revisa la lista y confirma el traslado. Las candidaturas históricas permanecen en la convocatoria donde se presentaron. Después de un traslado, revisa también los grupos asignados: cada persona solo puede consultar grupos de su convocatoria.
+5. En **Grupos de movilidad**, crea los grupos indicando convocatoria, destino y modalidad. Añade únicamente cuentas aprobadas de esa misma convocatoria. Si cambias un grupo de convocatoria, revisa primero el resumen de efectos y confirma solo si corresponde; el cambio no traslada las cuentas.
+6. En la agenda de cada grupo, publica actividades y tareas. Las personas participantes verán las fechas y podrán marcar tareas realizadas.
+
+#### Cuentas, candidaturas y documentación
+
+- **Cuentas:** aprueba o desactiva solicitudes; abre la ficha para editar datos y asignación. Solo puede aprobarse una cuenta después de verificar el correo y completar el trámite de privacidad. Cambiar el correo institucional obliga a verificarlo de nuevo y deja la cuenta pendiente. La anonimización es irreversible: úsala solo después de comprobar las obligaciones de conservación y confirmar el motivo.
+- **Candidaturas recibidas:** filtra por convocatoria y estado, abre el expediente y descarga el PDF original. Guarda una decisión manual —en valoración, preseleccionada, seleccionada, en reserva o no seleccionada— con una justificación obligatoria. Las puntuaciones opcionales son manuales: la aplicación no puntúa ni selecciona automáticamente. El listado se puede exportar a CSV.
+- **Archivo documental:** consulta los PDF de candidaturas y compromisos y los archivos adjuntos. La baja de un documento exige una justificación y confirmación; comprueba antes que la eliminación proceda.
+- **Autorizaciones de menores:** revisa los PDF enviados por representantes legales y registra la decisión. La cuenta no debe aprobarse hasta completar esta revisión.
+- **Crear cuenta:** permite añadir manualmente alumnado o docentes; estas cuentas también deben verificar su correo y completar los pasos de privacidad antes de ser aprobadas.
+
+#### Comunicación y correo
+
+- **Notificaciones:** publica avisos para todo el mundo, solo alumnado o solo docentes; puedes adjuntar un documento o imagen. Si Resend está configurado, se pone un correo institucional en cola para cada destinatario aprobado.
+- **Chat y supervisión:** el chat muestra las conversaciones permitidas y ofrece herramientas de supervisión. Informa a las personas usuarias del protocolo del centro y consulta las conversaciones únicamente con la autorización correspondiente.
+- **Configurar Resend:** guarda la configuración cifrada, valida el dominio remitente en Resend y utiliza el botón de prueba antes de abrir el registro o enviar comunicaciones reales.
+
+#### Portada pública y galerías
+
+- **Portada y galerías:** desde el menú de coordinación, abre **Portada y galerías**. Puedes editar los textos visibles, imagen principal, datos de contacto y enlaces HTTPS a redes sociales. Los destinos y la convocatoria vigente se leen directamente de **Ediciones y destinos**, no se duplican en la landing.
+- **Galerías:** crea un álbum, opcionalmente vincúlalo a una convocatoria y añade imágenes JPG, PNG o WebP de hasta 6 MB. Los álbumes y las fotos empiezan como borradores; coordina su publicación por separado. La portada muestra hasta 12 imágenes publicadas.
+- **Autorización de imágenes:** al publicar la imagen principal o una foto de galería se exige confirmar que existe autorización institucional. El sistema registra quién confirmó la publicación y cuándo. Esta casilla no sustituye la comprobación real de las autorizaciones ni la revisión del centro, especialmente para imágenes de menores.
+- **Almacenamiento:** las imágenes se guardan en `data/documents` junto a los adjuntos ya protegidos; las copias cifradas del directorio `/var/lib/erasmusplus` incluyen la base SQLite y esos archivos.
+
+Para proteger los datos y evitar candidaturas sin destino, sigue este orden: **crear edición → preparar destinos → activar convocatoria → asignar cuentas → crear grupos → publicar agenda y tareas → revisar candidaturas**.
+
+## 7. Limitaciones y obligaciones antes de producción
+
+El sistema requiere pruebas independientes de seguridad y accesibilidad, revisión de privacidad y conservación documental, controles adicionales de archivos, una política de copias y recuperación, fotografías y logotipos originales autorizados y comprobación del dominio de Resend. Ninguna prueba automatizada reemplaza estos controles. **No introducir datos personales reales hasta que la administración educativa confirme las medidas necesarias.**
+
+**Replit:** no publicar esta versión con el almacenamiento actual. SQLite y los documentos adjuntos se guardan en el sistema de archivos local, que en las aplicaciones publicadas de Replit se restablece al reiniciar o volver a publicar. Para conservar SQLite sin migrarlo, usar un servidor/VM con disco local persistente y el despliegue systemd descrito en este README. Antes de usar datos reales, añadir copias diarias cifradas fuera del servidor y ensayar la restauración conjunta de SQLite y documentos. Las copias previas a actualizaciones descritas aquí son locales, se conservan unos 14 días y no sustituyen una copia externa diaria. Una alternativa de alojamiento que exija cambiar el almacenamiento requiere aprobación explícita antes de modificar la base de datos o el código.
+
+El secreto `MMG_SECRET` debe permanecer estable y protegido; también permite descifrar la configuración de correo guardada en SQLite. Mantener `MMG_ENV=production`, `MMG_SECURE_COOKIE=1`, `MMG_ENABLE_REGISTRATION=0` y `MMG_PRIVACY_VERSION=PENDIENTE_REVISION` hasta completar la autorización técnica e institucional. **Publicar la aplicación y abrir el registro de participantes son decisiones separadas que requieren aprobación propia.**
+
+Documentación: [Privacidad y menores](docs/PRIVACIDAD_Y_MENORES.md) · [Cloudflare Tunnel](deploy/CLOUDFLARE_TUNNEL.md) · [Instalación técnica](docs/UBUNTU.md).

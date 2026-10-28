@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Erasmus+ MMG"
+description = "Portal de movilidades Erasmus+ del IES Manuel Martín González para alumnado, docentes y coordinación."
+version = "1.0.0"
+id = "artifacts/erasmusplus-mmg"
+router = "path"
+
+[[services]]
+name = "web"
+paths = ["/"]
+localPort = 19167
+
+[services.development]
+run = "pnpm --filter @workspace/erasmusplus-mmg run dev"
+
+[services.production.build]
+args = ["pnpm", "--filter", "@workspace/erasmusplus-mmg", "run", "build"]
+
+[services.production.run]
+args = ["node", "artifacts/erasmusplus-mmg/dist/src/web-server.mjs"]
+
+[services.production.run.env]
+PORT = "19167"
+
+[services.env]
+PORT = "19167"
+BASE_PATH = "/"

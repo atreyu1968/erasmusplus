@@ -1,44 +1,52 @@
-# Running Erasmus+ MMG on Replit
+# Erasmus+ MMG
 
-This is the imported Node.js 24 + SQLite application. Keep its existing stack and layout; the Ubuntu/systemd installer is not needed on Replit.
+Portal de movilidades Erasmus+ del IES Manuel Martín González.
 
-## Start
+## Run & Operate
 
-Use **Run** to start the `Start application` workflow. It runs `npm start` with `MMG_SECRET` taken from the existing `SESSION_SECRET` when no dedicated `MMG_SECRET` is set. Neither secret is stored in the repository. Keep this secret stable: it signs tokens and encrypts saved email configuration.
+- Start the managed workflows `artifacts/api-server: API Server` and `artifacts/erasmusplus-mmg: web`.
+- `pnpm run check` checks migration entry-point syntax; `pnpm test` runs the existing tests with temporary databases and fictional accounts.
+- Node.js 24 is required for `node:sqlite`.
+- Do not run a root development/build command to verify the app. Use its workflows.
 
-The development environment sets `HOST=0.0.0.0`, `PORT=5000`, `MMG_ENV=development`, `MMG_SECURE_COOKIE=1` (the Replit preview uses HTTPS), and `MMG_ENABLE_REGISTRATION=0`.
+## Stack
 
-The preview opens the Spanish-language public homepage. `/acceso` is the login page and `/healthz` returns `ok`. No coordinator account is created automatically.
+- pnpm workspaces, Node.js 24, TypeScript 5.9
+- The original application is Node HTTP + server-rendered HTML + SQLite, not a React SPA.
+- Keep its native forms, redirects, server rendering, session cookies and CSRF checks intact.
+- PostgreSQL/Drizzle and generated-client packages are unused scaffold, not the app's datastore. Do not push their schema or convert SQLite without explicit approval.
 
-## Dependencies and checks
+## Where things live
 
-- Node.js 24 is required for the built-in `node:sqlite` module.
-- Dependencies are defined in `package.json` and `package-lock.json`; restore with `npm ci` if needed.
-- Run `npm run check` and `npm test` for the existing checks. Tests use temporary databases and fictional accounts.
+- `artifacts/erasmusplus-mmg/`: public web artifact at `/`, original CSS/JS/images/PWA assets and streaming web gateway.
+- `artifacts/api-server/src/legacy/`: original application handlers, server-generated views, SQLite schema and business logic.
+- `/api/legacy/*`: internal transport for the original native HTTP protocol; `/api/healthz`: health check.
+- `src` and `public` at the root are compatibility symlinks for existing tests and administration tools.
+- `artifacts/mockup-sandbox/`: existing design previews, not the live website.
 
-After task merges, `scripts/post-merge.sh` restores locked dependencies and runs the syntax check. Replit then reconciles the running workflows. The hook does not change secrets, create accounts, or alter application data.
+## Architecture decisions
 
-## Storage and access
+- This is a parity port, not a redesign. Retain the original SSR protocol rather than rewrite its many pages into React/generated hooks.
+- The web artifact forwards dynamic requests through the shared proxy, preserving URLs, bodies, cookies, statuses, redirects and downloads.
+- SQLite and private uploads remain together under `MMG_DATA_DIR` (default root `data/`), excluded from Git.
+- Post-merge setup restores the original local database (including WAL records) and documents only when root `data/` is absent. It never replaces existing data or seeds accounts.
 
-SQLite and uploaded files live under `data/` by default. This folder, dependencies, local environment files, and database files are excluded from Git. Do not delete the folder if its contents need to be retained.
+## Product
 
-To create the initial coordinator, supply `MMG_ADMIN_USERNAME`, `MMG_ADMIN_EMAIL`, and `MMG_ADMIN_PASSWORD` (at least 16 characters) securely using Replit Secrets, then run `npm run init-admin`. Remove those three bootstrap secrets afterward. Never put credentials in chat or tracked files.
+Spanish-language portal for students, teachers and coordination: applications, editions, destinations, selection, agenda/tasks, documents/PDFs, consent, messaging, notifications, passkeys and configurable public pages.
 
-Email sending is not configured. The existing coordinator settings page supports Resend configuration after the first coordinator is created; no delivery is simulated.
+## User preferences
 
-## Safety and deployment
+Preserve the existing colors and supplied MMG logo in the header, PDFs and favicon. Keep the header fixed, with the content area's scrollbar starting below it. Hide side navigation on visitor, login, registration and personal-data-protection pages. Internal navigation stays narrow when collapsed, opens on hover, and has a floating pin to keep it open; keep that pin accessible by keyboard and touch. The migration does not include the queued mobile application.
 
-Registration remains disabled. Use fictional data only, as required by the repository README. Enabling real registration requires the institution's technical and privacy approvals, approved privacy settings, and working email delivery.
+## Gotchas
 
-This setup is for the development preview, not a production deployment. **Do not publish this app on Replit with its current storage implementation.** `src/db.mjs` and `src/feature-service.mjs` store SQLite, its WAL files, and private uploads under `MMG_DATA_DIR` (default `./data`). Replit published deployments do not preserve files across restarts or republishing, including Reserved VM deployments. Losing or separating the database and its document files would make saved records or attachments unavailable.
+- Keep `MMG_SECRET` stable: it signs tokens and encrypts email settings. The API runtime retains the previous fallback to `SESSION_SECRET`; never print either secret.
+- Development keeps `MMG_ENABLE_REGISTRATION=0`, `MMG_ENV=development`, and `MMG_SECURE_COOKIE=1` for the HTTPS preview. No coordinator account is created automatically.
+- Do not publish this app on Replit with its current local SQLite/upload storage: a durable-storage redesign needs separate approval. Keep database and documents together on an approved persistent volume for production, with independent encrypted backups.
+- Registration and real participant data require the institution's security/privacy approvals and working email delivery. Keep registration closed and use fictional data meanwhile.
+- Existing Ubuntu deployment helpers are retained for reference; their legacy npm/single-package installation commands are not the new workspace's setup procedure.
 
-### Recommended data protection before production
+## Pointers
 
-- **Keep SQLite; do not put its database in object storage.** The compatible option with the current code is a supported, dedicated Ubuntu server/VM with a persistent local filesystem, using the existing systemd deployment and `/var/lib/erasmusplus` for the database and `documents/` together. SQLite requires normal filesystem locking and its WAL files; the database and uploads must remain on the same persistent data volume.
-- **Add independent daily backups before production use.** The current updater stops the service and creates a consistent, age-encrypted archive of `/var/lib/erasmusplus` before updates, but stores it only on that server and deletes archives after about 14 days. This is useful for update rollback, not disaster recovery. Add a scheduled daily encrypted copy to institution-controlled storage on a separate system/account, with institution-approved retention and access controls.
-- **Back up and restore the database and documents as one set.** Quiesce the app (or use a tested SQLite backup procedure), archive the full data directory, encrypt with the existing age recipient, and verify the backup before transferring it off-host. Keep the age identity/private key offline and separate from the backup destination. Rehearse restoring both database and documents into an isolated environment; check SQLite integrity and verify that stored file references resolve. Treat backups as personal data and apply the approved retention policy.
-- **Keep the encryption/signing secret stable.** `MMG_SECRET` is used both for session/CSRF signatures and encryption of saved email settings, so changing it without a planned migration can invalidate sessions and make saved configuration unreadable. Keep the same secret through restarts and releases, protect it separately from data backups, and include a controlled recovery procedure. The development workflow currently falls back to `SESSION_SECRET`; the secret exists in this workspace, but its length and continuity across future published environments have not been verified. For a production target, set a dedicated stable `MMG_SECRET` of at least 48 characters in that target's secret manager; never put it in Git or a backup archive.
-- **Require production flags.** Set `MMG_ENV=production` and `MMG_SECURE_COOKIE=1`; the app rejects production startup without a 48-character `MMG_SECRET` or secure cookies. Session cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` when configured. Use the final approved HTTPS origin and restrict the service bind address and network access to the intended proxy.
-- **Keep registration closed.** Leave `MMG_ENABLE_REGISTRATION=0` and `MMG_PRIVACY_VERSION=PENDIENTE_REVISION` until the institution and its privacy lead approve the notice, required `MMG_PRIVACY_*` values, technical controls, and email delivery. Real participant registration and public publishing each require separate approval. Continue using fictional data until those gates are met.
-
-If Replit is selected as the production host, stop before publishing and obtain approval for a storage redesign: App Storage can persist uploaded documents but does not make this local SQLite database persistent. Moving documents to App Storage would require code changes, and making structured records durable would require an explicitly approved database/storage change. Do not silently migrate away from SQLite or treat a Replit deployment filesystem as a durable disk.
+- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details

@@ -1,0 +1,303 @@
+.verified-destination-preview {
+  min-height: 100vh;
+  background: #f4f7fa;
+}
+
+.verified-destination-preview .verified-topbar {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 10px clamp(18px, 5vw, 64px);
+  color: #eaf2f9;
+  background: #143d6b;
+  border-bottom: 1px solid #ffffff1c;
+}
+
+.verified-destination-preview .verified-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-right: auto;
+  color: #fff;
+  text-decoration: none;
+}
+
+.verified-destination-preview .verified-brand b,
+.verified-destination-preview .verified-brand small {
+  display: block;
+}
+
+.verified-destination-preview .verified-brand b {
+  font-size: 13px;
+  letter-spacing: -.01em;
+}
+
+.verified-destination-preview .verified-brand small {
+  margin-top: 3px;
+  color: #bed3e6;
+  font-size: 10px;
+}
+
+.verified-destination-preview .verified-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #ffffff36;
+  border-radius: 10px;
+  background: #ffffff12;
+  color: #a7e2e4;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: -.03em;
+}
+
+.verified-destination-preview .verified-topbar-note {
+  padding-left: 23px;
+  border-left: 1px solid #ffffff38;
+  color: #c5d8e9;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 1.2px;
+}
+
+.verified-destination-preview .verified-access {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #eaf2f9;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.verified-destination-preview .verified-access:hover {
+  color: #9ee3e5;
+}
+
+.verified-destination-preview .verified-access svg,
+.verified-destination-preview .verified-destination-cta svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.verified-destination-preview .proposal-main {
+  max-width: 1400px;
+  padding: 0 clamp(18px, 4vw, 58px);
+}
+
+.verified-destination-preview .destinations-section {
+  padding: clamp(43px, 7vw, 78px) 0 72px;
+}
+
+.verified-destination-preview .section-heading {
+  margin-bottom: 30px;
+}
+
+.verified-destination-preview .section-heading h1 {
+  margin: 12px 0 7px;
+  color: #143d6b;
+  font-size: clamp(34px, 4.5vw, 54px);
+  font-weight: 720;
+  letter-spacing: -.06em;
+  line-height: 1.05;
+}
+
+.verified-destination-preview .proposal-dest-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.verified-destination-preview .proposal-destination {
+  border-color: #d9e4ee;
+  border-radius: 14px;
+  box-shadow: 0 8px 26px rgba(25, 64, 101, .055);
+  transition: transform .2s ease;
+}
+
+.verified-destination-preview .proposal-destination:hover {
+  box-shadow: 0 14px 34px rgba(25, 64, 101, .09);
+}
+
+.verified-destination-preview .destination-image-wrap {
+  height: clamp(200px, 20vw, 265px);
+}
+
+.verified-destination-preview .destination-image-wrap::after {
+  inset: 58% 0 0;
+  background: linear-gradient(0deg, rgba(12, 41, 70, .42), transparent);
+}
+
+.verified-destination-preview .destination-image-wrap img {
+  object-position: center 53%;
+}
+
+.verified-destination-preview .destination-content {
+  padding: 20px 20px 18px;
+}
+
+.verified-destination-preview .destination-content h2 {
+  margin: 0 0 8px;
+  color: #143d6b;
+  font-size: 24px;
+  font-weight: 720;
+  letter-spacing: -.05em;
+}
+
+.verified-destination-preview .destination-content > p {
+  min-height: 42px;
+  margin: 0;
+  color: #6c7d93;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.verified-destination-preview .verified-photo-credit {
+  display: grid;
+  min-height: 64px;
+  align-content: start;
+  gap: 3px;
+  margin-top: 13px;
+  padding-top: 11px;
+  border-top: 1px solid #e9eff4;
+  color: #61768c;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.verified-destination-preview .verified-photo-credit b {
+  color: #334e68;
+  font-weight: 700;
+}
+
+.verified-destination-preview .verified-photo-credit a {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: #236cba;
+  font-size: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.verified-destination-preview .verified-photo-credit a:hover {
+  color: #143d6b;
+}
+
+.verified-destination-preview .verified-photo-credit small {
+  color: #8291a1;
+  font-size: 9px;
+}
+
+.verified-destination-preview .verified-photo-reference {
+  color: #786c4d;
+}
+
+.verified-destination-preview .verified-photo-reference small {
+  color: #8c8064;
+}
+
+.verified-destination-preview .verified-destination-cta {
+  margin-top: 15px;
+}
+
+.verified-destination-preview .verified-source-note {
+  margin: 20px 2px 0;
+  color: #708198;
+  font-size: 11px;
+}
+
+@media (max-width: 1080px) {
+  .verified-destination-preview .proposal-dest-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 750px) {
+  .verified-destination-preview .verified-topbar {
+    min-height: 58px;
+    gap: 12px;
+    padding: 8px 14px;
+  }
+
+  .verified-destination-preview .verified-mark {
+    width: 34px;
+    height: 34px;
+  }
+
+  .verified-destination-preview .verified-topbar-note {
+    display: none;
+  }
+
+  .verified-destination-preview .proposal-main {
+    padding: 0 15px;
+  }
+
+  .verified-destination-preview .destinations-section {
+    padding: 43px 0 50px;
+  }
+
+  .verified-destination-preview .section-heading {
+    margin-bottom: 21px;
+  }
+
+  .verified-destination-preview .proposal-dest-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .verified-destination-preview .proposal-destination {
+    grid-template-columns: minmax(122px, 36%) minmax(0, 1fr);
+  }
+
+  .verified-destination-preview .destination-image-wrap {
+    height: 100%;
+    min-height: 215px;
+  }
+
+  .verified-destination-preview .destination-content {
+    padding: 16px;
+  }
+
+  .verified-destination-preview .destination-content h2 {
+    font-size: 21px;
+  }
+
+  .verified-destination-preview .destination-content > p {
+    min-height: 0;
+    font-size: 11px;
+  }
+
+  .verified-destination-preview .verified-photo-credit {
+    min-height: 0;
+    margin-top: 10px;
+    padding-top: 9px;
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 420px) {
+  .verified-destination-preview .verified-brand small {
+    display: none;
+  }
+
+  .verified-destination-preview .destination-image-wrap {
+    min-height: 190px;
+  }
+
+  .verified-destination-preview .proposal-destination {
+    grid-template-columns: 112px minmax(0, 1fr);
+  }
+
+  .verified-destination-preview .destination-content {
+    padding: 13px;
+  }
+}

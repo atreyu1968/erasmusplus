@@ -1,0 +1,23 @@
+{
+  "name": "Movilidades Erasmus+ MMG",
+  "short_name": "Erasmus MMG",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#153d6b",
+  "background_color": "#f6f9fc",
+  "icons": [
+    {
+      "src": "/erasmus-favicon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/erasmus-favicon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "description": "Gestión de movilidades Erasmus+ IES Manuel Martín González"
+}

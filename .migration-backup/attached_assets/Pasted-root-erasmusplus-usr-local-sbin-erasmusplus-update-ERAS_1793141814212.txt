@@ -1,0 +1,78 @@
+root@erasmusplus:~# /usr/local/sbin/erasmusplus-update
+[ERASMUS-MMG] Descargando rama main del repositorio autorizado por HTTPS.
+[ERASMUS-MMG] Validando versión ab75b7e83488568434092521c0633a0a912c0799 antes de detener el servicio.
+
+added 28 packages in 2s
+
+> movilidades-erasmus-mmg@0.3.0 test
+> node --test
+
+✔ Ubuntu deployment scripts have valid Bash syntax (13.533812ms)
+✔ Ubuntu installation uses noninteractive package configuration (0.587606ms)
+✔ administrator bootstrap is idempotent and hides password input (0.258893ms)
+✔ updater refreshes the bootstrap helper and avoids unattended prompts (0.458835ms)
+✔ Las convocatorias separan destinos, cuentas y candidaturas conservando el historial (1160.6269ms)
+✔ El PDF contiene catálogo de páginas, texto y huella verificable (4.700276ms)
+✔ Docente y alumnado: permisos, candidatura y PDF (987.486531ms)
+✔ El modelo de autorización se descarga como PDF AcroForm editable y con datos prerrellenados (379.124344ms)
+✔ Desempata grupos heredados a la edición vigente y aísla a la edición perdedora (67.78745ms)
+✔ Menor: modelo PDF, entrega y validación manual obligatoria (1709.89001ms)
+✖ MVP: creación del coordinador y controles básicos (1629.357356ms)
+✔ the right-side content scroll starts below the fixed header (1.762428ms)
+✔ sidebar opens on hover and the floating pin keeps it open (2.375173ms)
+✔ keyboard focus opens the sidebar and Escape closes and unpins it (1.116641ms)
+✔ a saved pin is restored and touch users can open it by tapping (1.936009ms)
+✖ Valoración manual y agenda: seguridad por perfil, grupo y CSRF (1433.634598ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 14
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8263.870386
+
+✖ failing tests:
+
+test at tests/integration.test.mjs:27:1
+✖ MVP: creación del coordinador y controles básicos (1629.357356ms)
+  AssertionError [ERR_ASSERTION]: el modo de fixtures no encola avisos
+  actual expected
+  
+  '\x1B[33m0\x1B[39m'
+  
+      at TestContext.<anonymous> (file:///opt/erasmusplus/releases/.prepare.bia8UWae/tests/integration.test.mjs:165:11)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '\x1B[33m0\x1B[39m',
+    expected: '0',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/selection-and-agenda.test.mjs:8:1
+✖ Valoración manual y agenda: seguridad por perfil, grupo y CSRF (1433.634598ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  actual expected
+  
+  '\x1B[33m1\x1B[39m'
+  
+      at TestContext.<anonymous> (file:///opt/erasmusplus/releases/.prepare.bia8UWae/tests/selection-and-agenda.test.mjs:187:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '\x1B[33m1\x1B[39m',
+    expected: '1',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+[ERASMUS-MMG] Error 1: intentando recuperar código y datos anteriores.
+[ERASMUS-MMG] Consultar: journalctl -u erasmusplus
+[ERASMUS-MMG] Error 1: intentando recuperar código y datos anteriores.
+[ERASMUS-MMG] Consultar: journalctl -u erasmusplus
+root@erasmusplus:~# 

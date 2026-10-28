@@ -1,22 +1,25 @@
 {
-  "name": "movilidades-erasmus-mmg",
-  "version": "0.3.0",
-  "private": true,
-  "type": "module",
-  "description": "Plataforma Erasmus+ MMG en Node.js + SQLite",
-  "engines": {
-    "node": ">=24.0.0"
-  },
+  "name": "workspace",
+  "version": "0.0.0",
+  "license": "MIT",
   "scripts": {
-    "start": "node src/server.mjs",
+    "check": "node --check artifacts/api-server/src/legacy/server.mjs && node --check artifacts/api-server/src/legacy-entry.mjs && node --check artifacts/erasmusplus-mmg/src/web-server.mjs",
+    "test": "node --test tests/*.test.mjs",
     "init-admin": "node scripts/init-admin.mjs",
     "seed-test-accounts": "node scripts/seed-test-accounts.mjs",
     "seed-test-candidates": "node scripts/seed-test-candidates.mjs",
-    "check": "node --check src/server.mjs",
-    "test": "node --test"
+    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
+    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "typecheck:libs": "tsc --build",
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
+  "private": true,
   "dependencies": {
-    "@simplewebauthn/server": "^13.3.3",
-    "pdf-lib": "^1.17.1"
+    "@replit/connectors-sdk": "^0.4.3"
+  },
+  "devDependencies": {
+    "pdf-lib": "^1.17.1",
+    "prettier": "^3.9.10",
+    "typescript": "~5.9.3"
   }
 }

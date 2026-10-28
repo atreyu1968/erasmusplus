@@ -1,8 +1,7 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
-
-# Restore the locked dependencies without touching application data or secrets.
-npm ci --no-audit --no-fund
-npm run check
+#!/bin/bash
+set -e
+pnpm install --frozen-lockfile
+# The existing application uses SQLite. Never push the unused PostgreSQL
+# scaffold or provision a second, empty database during this port.
+node scripts/restore-legacy-data.mjs
+pnpm run check

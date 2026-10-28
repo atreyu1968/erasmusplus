@@ -1,0 +1,22 @@
+{
+  "name": "movilidades-erasmus-mmg",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Plataforma Erasmus+ MMG en Node.js + SQLite",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "init-admin": "node scripts/init-admin.mjs",
+    "seed-test-accounts": "node scripts/seed-test-accounts.mjs",
+    "seed-test-candidates": "node scripts/seed-test-candidates.mjs",
+    "check": "node --check src/server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@simplewebauthn/server": "^13.3.3",
+    "pdf-lib": "^1.17.1"
+  }
+}
