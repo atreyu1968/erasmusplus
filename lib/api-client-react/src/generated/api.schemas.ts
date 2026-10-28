@@ -232,12 +232,30 @@ export interface ConversationDirectory {
   groups: MobileConversation[];
 }
 
+export type MobileMessageAttachmentKind = typeof MobileMessageAttachmentKind[keyof typeof MobileMessageAttachmentKind];
+
+
+export const MobileMessageAttachmentKind = {
+  audio: 'audio',
+  file: 'file',
+} as const;
+
+export interface MobileMessageAttachment {
+  id: number;
+  name: string;
+  mime: string;
+  bytes: number;
+  kind: MobileMessageAttachmentKind;
+  downloadUrl: string;
+}
+
 export interface MobileMessage {
   id: number;
   senderId: number;
   senderName: string;
   content: string;
   createdAt: string;
+  attachments: MobileMessageAttachment[];
 }
 
 export type ConversationHistoryKind = typeof ConversationHistoryKind[keyof typeof ConversationHistoryKind];
@@ -274,6 +292,25 @@ export interface MobileMessageInput {
   content: string;
   /** @minLength 1 */
   csrfToken: string;
+}
+
+export type MobileMessageAttachmentInputKind = typeof MobileMessageAttachmentInputKind[keyof typeof MobileMessageAttachmentInputKind];
+
+
+export const MobileMessageAttachmentInputKind = {
+  direct: 'direct',
+  group: 'group',
+} as const;
+
+export interface MobileMessageAttachmentInput {
+  kind: MobileMessageAttachmentInputKind;
+  /** @minimum 1 */
+  targetId: number;
+  /** @maxLength 2500 */
+  content?: string;
+  /** @minLength 1 */
+  csrfToken: string;
+  file?: Blob | File;
 }
 
 export interface MobilePushConfig {

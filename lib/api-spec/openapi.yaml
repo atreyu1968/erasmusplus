@@ -385,6 +385,85 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /mobile/messages/attachments:
+    post:
+      operationId: sendMobileMessageAttachment
+      tags: [mobile]
+      summary: Send a message with an attached file or audio
+      security:
+        - mmgSession: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/MobileMessageAttachmentInput"
+      responses:
+        "201":
+          description: Message and attachment saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobileMessage"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Conversation is not available to this account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/messages/attachments/{attachmentId}:
+    get:
+      operationId: getMobileMessageAttachment
+      tags: [mobile]
+      summary: Download an attachment from an authorized conversation
+      security:
+        - mmgSession: []
+      parameters:
+        - name: attachmentId
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Attachment content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: Partial audio response
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Conversation is not available to this account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Attachment is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /mobile/tasks/{taskId}/complete:
     post:
       operationId: completeMobileTask
@@ -769,7 +848,22 @@ components:
         senderName: { type: string }
         content: { type: string }
         createdAt: { type: string }
-      required: [id, senderId, senderName, content, createdAt]
+        attachments:
+          type: array
+          items: { $ref: "#/components/schemas/MobileMessageAttachment" }
+      required: [id, senderId, senderName, content, createdAt, attachments]
+    MobileMessageAttachment:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        mime: { type: string }
+        bytes: { type: integer }
+        kind:
+          type: string
+          enum: [audio, file]
+        downloadUrl: { type: string }
+      required: [id, name, mime, bytes, kind, downloadUrl]
     ConversationHistory:
       type: object
       properties:
@@ -792,6 +886,19 @@ components:
         content: { type: string, minLength: 1, maxLength: 2500 }
         csrfToken: { type: string, minLength: 1 }
       required: [kind, targetId, content, csrfToken]
+    MobileMessageAttachmentInput:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [direct, group]
+        targetId: { type: integer, minimum: 1 }
+        content: { type: string, maxLength: 2500 }
+        csrfToken: { type: string, minLength: 1 }
+        file:
+          type: string
+          format: binary
+      required: [kind, targetId, csrfToken]
     MobilePushConfig:
       type: object
       properties:

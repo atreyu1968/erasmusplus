@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { MobileMessageAttachment } from './mobileMessageAttachment';
 
 export interface MobileMessage {
   id: number;
@@ -12,4 +13,5 @@ export interface MobileMessage {
   senderName: string;
   content: string;
   createdAt: string;
+  attachments: MobileMessageAttachment[];
 }

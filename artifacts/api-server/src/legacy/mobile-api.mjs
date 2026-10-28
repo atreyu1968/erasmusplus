@@ -4,8 +4,12 @@ import {
   validCsrf, verifyPassword
 } from './auth.mjs';
 import {
-  activeEdition, clean, editionForUser, queueMail
+  activeEdition, clean, editionForUser, multipart, queueMail, readAttachment
 } from './feature-service.mjs';
+import {
+  discardMobileAttachment, linkMobileAttachment, mobileMessageAttachment,
+  mobileMessageAttachments, saveMobileAttachment
+} from './mobile-attachments.mjs';
 import {
   mobilePushConfig, removeMobilePushSubscription,
   saveMobilePushSubscription, sendMobilePush
@@ -387,7 +391,8 @@ function conversationHistory(user, kind, targetId) {
         senderId: message.sender_id,
         senderName: message.first_name + ' ' + message.last_name,
         content: message.content,
-        createdAt: message.created_at
+        createdAt: message.created_at,
+        attachments: mobileMessageAttachments(message.id)
       }))
     };
   }
@@ -408,7 +413,8 @@ function conversationHistory(user, kind, targetId) {
       senderId: message.sender_id,
       senderName: message.first_name + ' ' + message.last_name,
       content: message.content,
-      createdAt: message.created_at
+      createdAt: message.created_at,
+      attachments: mobileMessageAttachments(message.id)
     }))
   };
 }
@@ -536,8 +542,175 @@ async function sendMessage(req, api) {
     senderId: saved.sender_id,
     senderName: saved.first_name + ' ' + saved.last_name,
     content: saved.content,
-    createdAt: saved.created_at
+    createdAt: saved.created_at,
+    attachments: mobileMessageAttachments(saved.id)
   });
+}
+async function sendMessageAttachment(req, api) {
+  const user = requireUser(req, api);
+  if (!user) return;
+  let form;
+  try {
+    form = await multipart(req);
+  } catch (err) {
+    handleFailure(req, api, err);
+    return;
+  }
+  const body = {
+    csrfToken: String(form.get('csrfToken') || ''),
+    kind: String(form.get('kind') || ''),
+    targetId: Number(form.get('targetId')),
+    content: clean(form.get('content'), 2500)
+  };
+  const file = form.get('file');
+  if (!validBodyCsrf(req, body)) {
+    error(req, api, 403, 'La solicitud ha caducado. Actualiza la página e inténtalo de nuevo.');
+    return;
+  }
+  if (!['direct', 'group'].includes(body.kind) ||
+      !Number.isSafeInteger(body.targetId) || body.targetId < 1 ||
+      (!body.content && (!file || typeof file.arrayBuffer !== 'function' || file.size < 1))) {
+    error(req, api, 400, 'Añade un mensaje o un archivo y comprueba el destinatario.');
+    return;
+  }
+
+  let targetUser = null;
+  let group = null;
+  let recipients = [];
+  if (body.kind === 'direct') {
+    targetUser = get("SELECT id,institutional_email,status FROM users WHERE id=? AND status='approved'", body.targetId);
+    if (!targetUser || targetUser.id === user.id ||
+        !directContacts(user).some(contact => contact.id === targetUser.id)) {
+      error(req, api, 403, 'No tienes acceso a esa conversación.');
+      return;
+    }
+    recipients = [targetUser.id];
+  } else {
+    group = authorizedGroup(user, body.targetId);
+    if (!group) {
+      error(req, api, 403, 'No tienes acceso a esa conversación.');
+      return;
+    }
+    recipients = all(
+      `SELECT u.id FROM users u JOIN group_members gm ON gm.user_id=u.id
+        JOIN mobility_groups g ON g.id=gm.group_id
+       WHERE gm.group_id=? AND u.status='approved' AND u.id<>?
+         AND u.edition_id=g.edition_id`,
+      body.targetId, user.id
+    ).map(row => row.id);
+  }
+
+  let savedFile = null;
+  let messageId = null;
+  try {
+    if (file && typeof file.arrayBuffer === 'function' && file.size > 0) {
+      savedFile = await saveMobileAttachment(file);
+    }
+    const result = body.kind === 'direct'
+      ? run('INSERT INTO messages(sender_id,receiver_id,content) VALUES (?,?,?)', user.id, body.targetId, body.content)
+      : run('INSERT INTO messages(sender_id,group_id,content) VALUES (?,?,?)', user.id, body.targetId, body.content);
+    messageId = Number(result.lastInsertRowid);
+    if (savedFile) linkMobileAttachment(messageId, savedFile.id);
+    if (body.kind === 'direct') {
+      queueMail(
+        targetUser.institutional_email,
+        'Mensaje recibido · Erasmus+ MMG',
+        'Tienes un mensaje nuevo de ' + user.first_name + ' ' + user.last_name +
+          ' en Movilidades Erasmus+ MMG. Accede a la aplicación para leerlo.'
+      );
+    }
+    audit(user.id, body.kind === 'direct' ? 'chat_direct_message_sent' : 'chat_group_message_sent', messageId);
+  } catch (err) {
+    if (messageId) run('DELETE FROM messages WHERE id=?', messageId);
+    if (savedFile) discardMobileAttachment(savedFile.id);
+    const status = Number.isInteger(err?.status) ? err.status : 500;
+    if (status === 500) {
+      logger.error({ error: err?.message || 'unknown' }, 'Unable to save mobile message attachment');
+    }
+    error(req, api, status, status === 500 ? 'No se pudo enviar el archivo.' : err.message);
+    return;
+  }
+
+  void sendMobilePush(recipients, { kind: body.kind, id: body.targetId }).catch(err => {
+    logger.warn({ error: err?.message || 'unknown' }, 'Unable to queue browser message notification');
+  });
+  const saved = get(
+    `SELECT m.id,m.sender_id,m.content,m.created_at,u.first_name,u.last_name
+       FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=?`,
+    messageId
+  );
+  if (!saved) {
+    error(req, api, 500, 'No se pudo confirmar el mensaje enviado.');
+    return;
+  }
+  json(req, api, 201, {
+    id: saved.id,
+    senderId: saved.sender_id,
+    senderName: saved.first_name + ' ' + saved.last_name,
+    content: saved.content,
+    createdAt: saved.created_at,
+    attachments: mobileMessageAttachments(saved.id)
+  });
+}
+function serveMessageAttachment(req, api, user, fileId) {
+  const file = mobileMessageAttachment(fileId);
+  if (!file) {
+    error(req, api, 404, 'Archivo no disponible.');
+    return;
+  }
+  if (file.receiver_id !== null) {
+    if ((file.sender_id !== user.id && file.receiver_id !== user.id) ||
+        !directContacts(user).some(contact =>
+          contact.id === (file.sender_id === user.id ? file.receiver_id : file.sender_id))) {
+      error(req, api, 403, 'No tienes acceso a esta conversación.');
+      return;
+    }
+  } else if (!authorizedGroup(user, file.group_id)) {
+    error(req, api, 403, 'No tienes acceso a esta conversación.');
+    return;
+  }
+  audit(user.id, 'chat_attachment_downloaded', file.id);
+  let bytes;
+  try {
+    bytes = readAttachment(file);
+  } catch (err) {
+    logger.error({ error: err?.message || 'unknown', fileId }, 'Unable to read mobile message attachment');
+    error(req, api, 404, 'Archivo no disponible.');
+    return;
+  }
+  const encodedName = encodeURIComponent(file.original_name).replace(/['()*]/g, char =>
+    '%' + char.charCodeAt(0).toString(16).toUpperCase()
+  );
+  const isAudio = file.mime.startsWith('audio/');
+  const headers = {
+    'Cache-Control': 'private, no-store',
+    'Content-Disposition': (isAudio ? 'inline' : 'attachment') + "; filename*=UTF-8''" + encodedName,
+    'X-Content-Type-Options': 'nosniff',
+    'Accept-Ranges': 'bytes'
+  };
+  const range = String(req.headers.range || '');
+  if (range) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    if (!match || (!match[1] && !match[2])) {
+      api.raw(req, 416, Buffer.alloc(0), file.mime, { ...headers, 'Content-Range': 'bytes */' + bytes.length });
+      return;
+    }
+    const start = match[1] ? Number(match[1]) : Math.max(0, bytes.length - Number(match[2]));
+    const end = match[2] && match[1] ? Math.min(bytes.length - 1, Number(match[2])) :
+      match[1] ? bytes.length - 1 : bytes.length - 1;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= bytes.length) {
+      api.raw(req, 416, Buffer.alloc(0), file.mime, { ...headers, 'Content-Range': 'bytes */' + bytes.length });
+      return;
+    }
+    const partial = bytes.subarray(start, end + 1);
+    api.raw(req, 206, partial, file.mime, {
+      ...headers,
+      'Content-Length': String(partial.length),
+      'Content-Range': 'bytes ' + start + '-' + end + '/' + bytes.length
+    });
+    return;
+  }
+  api.raw(req, 200, bytes, file.mime, { ...headers, 'Content-Length': String(bytes.length) });
 }
 function endpointIsTrusted(endpoint) {
   try {
@@ -643,6 +816,17 @@ export async function mobileApiRoutes(req, url, method, api) {
     }
     if (url === '/mobile/messages' && method === 'POST') {
       await sendMessage(req, api);
+      return true;
+    }
+    if (url === '/mobile/messages/attachments' && method === 'POST') {
+      await sendMessageAttachment(req, api);
+      return true;
+    }
+    const attachmentMatch = /^\/mobile\/messages\/attachments\/(\d+)$/.exec(url);
+    if (attachmentMatch && method === 'GET') {
+      const user = requireUser(req, api);
+      if (!user) return true;
+      serveMessageAttachment(req, api, user, Number(attachmentMatch[1]));
       return true;
     }
     const taskMatch = /^\/mobile\/tasks\/(\d+)\/complete$/.exec(url);

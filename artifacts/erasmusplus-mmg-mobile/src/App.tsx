@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import {
   ArrowDownToLine, ArrowLeft, ArrowRight, Bell, BookOpen, CalendarDays, Check,
   CheckCircle2, ChevronRight, FileText, Fingerprint, Home, LogIn, LogOut,
-  MessageCircle, Search, Send, Settings, ShieldCheck, Users, X,
+  MessageCircle, Mic, Paperclip, Search, Send, Settings, ShieldCheck, Smile,
+  Square, Users, X,
 } from 'lucide-react';
 import {
   getGetMobileConversationDirectoryQueryKey, getGetMobileConversationMessagesQueryKey,
@@ -45,6 +46,8 @@ const messageDayLabel = (date: string) => {
 const fullName = (u: { firstName: string; lastName: string }) => `${u.firstName} ${u.lastName}`.trim();
 const roleLabel = (role: string) => ({ student: 'Estudiante', teacher: 'Docente', coordinator: 'Coordinación' }[role] ?? role);
 const initials = (name: string) => name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+const chatEmojis = ['😀', '😅', '😂', '🥰', '😊', '😉', '😍', '🤔', '🙌', '👏', '👍', '🙏', '💪', '🎉', '❤️', '✨', '🌍', '✈️', '📚', '✅', '📍', '💬', '😎', '🤝'];
+const readableBytes = (bytes: number) => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 const navigationItems = [
   { href: '/inicio', label: 'Inicio', icon: Home },
   { href: '/documentos', label: 'Documentos', icon: FileText },
@@ -307,16 +310,146 @@ function ConversationPage({ user, csrfToken }: { user: { id: number; firstName: 
   const [, setLocation] = useLocation();
   const [content, setContent] = useState('');
   const [error, setError] = useState('');
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingLimitRef = useRef(false);
+  const recordingTimerRef = useRef<number | null>(null);
   const messageThreadRef = useRef<HTMLDivElement>(null);
   useEffect(() => { const el = messageThreadRef.current; if (el) el.scrollTop = el.scrollHeight; }, [id, kind, query.data?.messages.length]);
-  const send = (event: FormEvent) => {
+  useEffect(() => () => {
+    if (recordingTimerRef.current !== null) window.clearTimeout(recordingTimerRef.current);
+    const recorder = recorderRef.current;
+    if (recorder?.state === 'recording') {
+      recorder.onstop = null;
+      recorder.stop();
+    }
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+  const send = async (event: FormEvent) => {
     event.preventDefault();
     const message = content.trim();
-    if (!message || !valid) return;
+    if ((!message && !pendingFile) || !valid || recording || uploading) return;
+    if (pendingFile) {
+      setUploading(true);
+      setError('');
+      try {
+        const form = new FormData();
+        form.append('kind', kind);
+        form.append('targetId', String(id));
+        form.append('content', message);
+        form.append('csrfToken', csrfToken);
+        form.append('file', pendingFile, pendingFile.name);
+        const response = await fetch('/api/mobile/messages/attachments', {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: form,
+        });
+        const result = await response.json() as { error?: string };
+        if (!response.ok) throw new Error(result.error || 'No se ha podido enviar el archivo.');
+        setContent('');
+        setPendingFile(null);
+        setEmojiOpen(false);
+        await Promise.all([
+          client.invalidateQueries({ queryKey: getGetMobileConversationMessagesQueryKey(kind, id) }),
+          client.invalidateQueries({ queryKey: getGetMobileConversationDirectoryQueryKey() }),
+        ]);
+      } catch (sendError) {
+        setError(sendError instanceof Error ? sendError.message : 'No se ha podido enviar el archivo. Vuelve a intentarlo.');
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
     mutation.mutate({ data: { kind, targetId: id, content: message, csrfToken } }, {
       onSuccess: async () => { setContent(''); setError(''); await Promise.all([client.invalidateQueries({ queryKey: getGetMobileConversationMessagesQueryKey(kind, id) }), client.invalidateQueries({ queryKey: getGetMobileConversationDirectoryQueryKey() })]); },
       onError: () => setError('No se ha podido enviar el mensaje. Vuelve a intentarlo.'),
     });
+  };
+  const addEmoji = (emoji: string) => {
+    const field = textareaRef.current;
+    const start = field?.selectionStart ?? content.length;
+    const end = field?.selectionEnd ?? content.length;
+    setContent((current) => current.slice(0, start) + emoji + current.slice(end));
+    setEmojiOpen(false);
+    requestAnimationFrame(() => {
+      field?.focus();
+      field?.setSelectionRange(start + emoji.length, start + emoji.length);
+    });
+  };
+  const chooseFile = (file?: File) => {
+    if (!file) return;
+    if (file.size > 6 * 1024 * 1024) {
+      setError('Cada archivo debe pesar como máximo 6 MB.');
+      return;
+    }
+    setError('');
+    setPendingFile(file);
+    setEmojiOpen(false);
+  };
+  const stopRecording = () => {
+    if (recordingTimerRef.current !== null) window.clearTimeout(recordingTimerRef.current);
+    recordingTimerRef.current = null;
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+  };
+  const toggleRecording = async () => {
+    if (recording) {
+      stopRecording();
+      return;
+    }
+    setError('');
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setError('Este navegador no permite grabar audio. Puedes adjuntar un archivo de audio.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+      const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+      const mimeType = candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate));
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      recordingChunksRef.current = [];
+      recordingLimitRef.current = false;
+      recorder.ondataavailable = (event) => { if (event.data.size) recordingChunksRef.current.push(event.data); };
+      recorder.onerror = () => {
+        setError('No se pudo completar la grabación. Comprueba el permiso del micrófono e inténtalo de nuevo.');
+        stream.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+        setRecording(false);
+      };
+      recorder.onstop = () => {
+        const type = recorder.mimeType || recordingChunksRef.current[0]?.type || 'audio/webm';
+        const blob = new Blob(recordingChunksRef.current, { type });
+        if (blob.size > 6 * 1024 * 1024) {
+          setError('El audio supera el límite de 6 MB. Graba un mensaje más corto.');
+        } else if (blob.size > 0) {
+          const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
+          setPendingFile(new File([blob], `audio-${Date.now()}.${ext}`, { type: type.split(';')[0] }));
+          setError(recordingLimitRef.current ? 'La grabación se detuvo al llegar a 90 segundos.' : '');
+        }
+        recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+        recorderRef.current = null;
+        setRecording(false);
+      };
+      recorder.start(1000);
+      setRecording(true);
+      recordingTimerRef.current = window.setTimeout(() => {
+        recordingLimitRef.current = true;
+        stopRecording();
+      }, 90_000);
+    } catch {
+      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
+      setError('No se pudo acceder al micrófono. Revisa el permiso del navegador e inténtalo de nuevo.');
+    }
   };
   if (!valid) return <PageFrame user={user} className="chat-content" showFooter={false}><ErrorState retry={() => setLocation('/mensajes')} text="Esta conversación no está disponible." /></PageFrame>;
   return <PageFrame user={user} className="chat-content" showFooter={false}>
@@ -335,15 +468,27 @@ function ConversationPage({ user, csrfToken }: { user: { id: number; firstName: 
           const mine = message.senderId === user.id;
           return <article className={`chat-message${mine ? ' mine' : ''}`} key={message.id} data-testid={`message-${message.id}`}>
             {!mine && <strong className="chat-sender">{message.senderName}</strong>}
-            <p>{message.content}</p>
+            {message.content && <p>{message.content}</p>}
+            {message.attachments.map((attachment) => attachment.kind === 'audio'
+              ? <div className="chat-audio" key={attachment.id}><span><Mic size={14} aria-hidden="true" />{attachment.name}</span><audio controls preload="metadata" src={attachment.downloadUrl} aria-label={`Audio de ${message.senderName}`} /></div>
+              : <a className="chat-file" key={attachment.id} href={attachment.downloadUrl} download><FileText size={18} aria-hidden="true" /><span><strong>{attachment.name}</strong><small>{readableBytes(attachment.bytes)}</small></span><ArrowDownToLine size={16} aria-hidden="true" /></a>)}
             <time>{clockLabel(message.createdAt)}</time>
           </article>;
         }) : <div className="chat-empty"><div className="chat-empty-mark"><MessageCircle size={20} /></div><strong>Empieza la conversación</strong><p>Tu mensaje será visible para las personas autorizadas en este espacio.</p></div>}
       </div>
       {error && <div className="chat-error" role="alert">{error}</div>}
-      <form className="chat-composer" onSubmit={send}>
-        <textarea data-testid="input-message" aria-label="Escribe un mensaje" maxLength={2500} rows={1} placeholder="Escribe un mensaje…" value={content} onChange={(event) => setContent(event.target.value)} />
-        <button className="send-button" data-testid="button-send-message" aria-label="Enviar mensaje" disabled={!content.trim() || mutation.isPending}><Send size={17} /></button>
+      <form className="chat-composer" onSubmit={(event) => { void send(event); }}>
+        {emojiOpen && <div className="chat-emoji-picker" role="group" aria-label="Elige un emoticono">{chatEmojis.map((emoji) => <button type="button" key={emoji} onClick={() => addEmoji(emoji)} aria-label={`Añadir ${emoji}`}>{emoji}</button>)}</div>}
+        {pendingFile && <div className="chat-pending-file"><span><Paperclip size={14} aria-hidden="true" /><span><strong>{pendingFile.name}</strong><small>{readableBytes(pendingFile.size)}</small></span></span><button type="button" aria-label="Quitar archivo adjunto" onClick={() => setPendingFile(null)}><X size={16} /></button></div>}
+        {recording && <div className="chat-recording" role="status"><span className="recording-dot" />Grabando audio · pulsa detener al terminar</div>}
+        <div className="chat-compose-main">
+          <input ref={fileInputRef} className="chat-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,audio/webm,audio/mp4,audio/ogg,audio/wav,audio/mpeg" onChange={(event) => { chooseFile(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} aria-label="Seleccionar archivo adjunto" />
+          <button className="chat-tool-button" type="button" aria-label="Adjuntar archivo" title="Adjuntar archivo" onClick={() => fileInputRef.current?.click()} disabled={uploading || recording || Boolean(pendingFile)}><Paperclip size={18} /></button>
+          <button className="chat-tool-button" type="button" aria-label="Añadir emoticono" title="Añadir emoticono" aria-expanded={emojiOpen} onClick={() => setEmojiOpen((open) => !open)} disabled={uploading || recording}><Smile size={18} /></button>
+          <textarea ref={textareaRef} data-testid="input-message" aria-label="Escribe un mensaje" maxLength={2500} rows={1} placeholder="Escribe un mensaje…" value={content} onChange={(event) => setContent(event.target.value)} />
+          <button className={`chat-tool-button chat-record-button${recording ? ' active' : ''}`} type="button" aria-label={recording ? 'Detener grabación' : 'Grabar audio'} title={recording ? 'Detener grabación' : 'Grabar audio'} onClick={() => { void toggleRecording(); }} disabled={uploading || Boolean(pendingFile)}>{recording ? <Square size={17} /> : <Mic size={18} />}</button>
+          <button className="send-button" data-testid="button-send-message" aria-label="Enviar mensaje" disabled={(!content.trim() && !pendingFile) || mutation.isPending || uploading || recording}><Send size={17} /></button>
+        </div>
       </form>
       <p className="chat-hint">Solo las personas autorizadas pueden ver este chat.</p>
     </section>}

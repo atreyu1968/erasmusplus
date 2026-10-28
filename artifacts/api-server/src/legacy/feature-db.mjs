@@ -47,6 +47,10 @@ db.exec(
   "id INTEGER PRIMARY KEY,sender_id INTEGER NOT NULL REFERENCES users(id),receiver_id INTEGER REFERENCES users(id),"+
   "group_id INTEGER,content TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP,"+
   "CHECK ((receiver_id IS NOT NULL AND group_id IS NULL) OR (receiver_id IS NULL AND group_id IS NOT NULL)));" +
+  "CREATE TABLE IF NOT EXISTS mobile_message_attachments ("+
+  "id INTEGER PRIMARY KEY,message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,"+
+  "file_id INTEGER NOT NULL UNIQUE REFERENCES files(id) ON DELETE CASCADE,"+
+  "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);" +
   "CREATE TABLE IF NOT EXISTS mobility_groups ("+
   "id INTEGER PRIMARY KEY,name TEXT NOT NULL,destination TEXT NOT NULL,type TEXT NOT NULL CHECK(type IN ('short','long','shadowing')),"+
   "edition_id INTEGER NOT NULL REFERENCES erasmus_editions(id),"+

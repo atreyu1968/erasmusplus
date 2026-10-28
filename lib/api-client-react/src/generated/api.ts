@@ -30,6 +30,7 @@ import type {
   MobileLogin,
   MobileLogout,
   MobileMessage,
+  MobileMessageAttachmentInput,
   MobileMessageInput,
   MobilePasskeyDeleteInput,
   MobilePasskeyFinishInput,
@@ -1320,6 +1321,167 @@ export const useSendMobileMessage = <TError = ErrorType<ApiError>,
       > => {
       return useMutation(getSendMobileMessageMutationOptions(options));
     }
+
+export const getSendMobileMessageAttachmentUrl = () => {
+
+
+
+
+  return `/api/mobile/messages/attachments`
+}
+
+/**
+ * @summary Send a message with an attached file or audio
+ */
+export const sendMobileMessageAttachment = async (mobileMessageAttachmentInput: MobileMessageAttachmentInput, options?: Parameters<typeof customFetch>[1]): Promise<MobileMessage> => {
+    const formData = new FormData();
+formData.append(`kind`, mobileMessageAttachmentInput.kind);
+formData.append(`targetId`, mobileMessageAttachmentInput.targetId.toString())
+if(mobileMessageAttachmentInput.content !== undefined) {
+ formData.append(`content`, mobileMessageAttachmentInput.content);
+ }
+formData.append(`csrfToken`, mobileMessageAttachmentInput.csrfToken);
+if(mobileMessageAttachmentInput.file !== undefined) {
+ formData.append(`file`, mobileMessageAttachmentInput.file);
+ }
+
+  return customFetch<MobileMessage>(getSendMobileMessageAttachmentUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getSendMobileMessageAttachmentMutationKey = () => ['sendMobileMessageAttachment'] as const;
+
+export const getSendMobileMessageAttachmentMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendMobileMessageAttachment>>, TError,SendMobileMessageAttachmentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendMobileMessageAttachment>>, TError,SendMobileMessageAttachmentMutationVariables, TContext> => {
+
+const mutationKey = getSendMobileMessageAttachmentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendMobileMessageAttachment>>, SendMobileMessageAttachmentMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  sendMobileMessageAttachment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendMobileMessageAttachmentMutationResult = NonNullable<Awaited<ReturnType<typeof sendMobileMessageAttachment>>>
+    export type SendMobileMessageAttachmentMutationBody = BodyType<MobileMessageAttachmentInput>
+    export type SendMobileMessageAttachmentMutationError = ErrorType<ApiError>
+    export type SendMobileMessageAttachmentMutationVariables = {data: BodyType<MobileMessageAttachmentInput>}
+
+    /**
+ * @summary Send a message with an attached file or audio
+ */
+export const useSendMobileMessageAttachment = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendMobileMessageAttachment>>, TError,SendMobileMessageAttachmentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendMobileMessageAttachment>>,
+        TError,
+        SendMobileMessageAttachmentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSendMobileMessageAttachmentMutationOptions(options));
+    }
+
+export const getGetMobileMessageAttachmentUrl = (attachmentId: number,) => {
+
+
+
+
+  return `/api/mobile/messages/attachments/${attachmentId}`
+}
+
+/**
+ * @summary Download an attachment from an authorized conversation
+ */
+export const getMobileMessageAttachment = async (attachmentId: number, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetMobileMessageAttachmentUrl(attachmentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMobileMessageAttachmentQueryKey = (attachmentId: number,) => {
+    return [
+    `/api/mobile/messages/attachments/${attachmentId}`
+    ] as const;
+    }
+
+
+export const getGetMobileMessageAttachmentQueryOptions = <TData = Awaited<ReturnType<typeof getMobileMessageAttachment>>, TError = ErrorType<ApiError>>(attachmentId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMobileMessageAttachment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMobileMessageAttachmentQueryKey(attachmentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMobileMessageAttachment>>> = ({ signal }) => getMobileMessageAttachment(attachmentId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: attachmentId !== null && attachmentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMobileMessageAttachment>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMobileMessageAttachmentQueryResult = NonNullable<Awaited<ReturnType<typeof getMobileMessageAttachment>>>
+export type GetMobileMessageAttachmentQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Download an attachment from an authorized conversation
+ */
+
+export function useGetMobileMessageAttachment<TData = Awaited<ReturnType<typeof getMobileMessageAttachment>>, TError = ErrorType<ApiError>>(
+ attachmentId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMobileMessageAttachment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMobileMessageAttachmentQueryOptions(attachmentId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getCompleteMobileTaskUrl = (taskId: number,) => {
 

@@ -207,6 +207,62 @@ test('MVP: creación del coordinador y controles básicos',async ()=>{
     assert.doesNotMatch(html,new RegExp('value="'+forbiddenMobility+'\\|'));
     assert.equal(html.includes('¿Tienes beca MEC?'),hasMecField);
    }
+    async function loginMobile(username){
+     const bootstrap=await fetch(base+'/mobile/session');
+     assert.equal(bootstrap.status,200);
+     const bootstrapData=await bootstrap.json();
+     const csrfCookie=bootstrap.headers.get('set-cookie')?.split(';')[0];
+     assert.ok(csrfCookie&&bootstrapData.csrfToken);
+     const response=await fetch(base+'/mobile/session',{
+      method:'POST',
+      headers:{'content-type':'application/json',cookie:csrfCookie},
+      body:JSON.stringify({username,password:'MMG-Aislado-Prueba-2026!',csrfToken:bootstrapData.csrfToken})
+     });
+     assert.equal(response.status,200,username+' inicia sesión en la API móvil');
+     const data=await response.json();
+     return {cookie:response.headers.get('set-cookie')?.split(';')[0],csrfToken:data.csrfToken};
+    }
+    const studentMobile=await loginMobile('TESTALUMNO');
+    const coordinatorMobile=await loginMobile('TESTADMIN');
+    const directory=await fetch(base+'/mobile/conversations',{headers:{cookie:studentMobile.cookie}});
+    assert.equal(directory.status,200);
+    const studentDirectory=(await directory.json()).contacts;
+    const coordinatorContact=studentDirectory.find(contact=>contact.role==='coordinator');
+    assert.ok(coordinatorContact,'el alumno tiene la conversación directa autorizada con coordinación');
+    const coordinatorDirectory=await fetch(base+'/mobile/conversations',{headers:{cookie:coordinatorMobile.cookie}});
+    const studentContact=(await coordinatorDirectory.json()).contacts.find(contact=>contact.role==='student');
+    assert.ok(studentContact,'coordinación puede abrir la conversación del alumno');
+    async function sendMobileFile(fileName,type,bytes){
+     const form=new FormData();
+     form.set('kind','direct');
+     form.set('targetId',String(coordinatorContact.id));
+     form.set('csrfToken',studentMobile.csrfToken);
+     form.set('file',new Blob([Buffer.from(bytes)],{type}),fileName);
+     return fetch(base+'/mobile/messages/attachments',{
+      method:'POST',headers:{cookie:studentMobile.cookie},body:form
+     });
+    }
+    const audioResponse=await sendMobileFile('nota.webm','audio/webm',[0x1a,0x45,0xdf,0xa3,0x00,0x01]);
+    assert.equal(audioResponse.status,201,'se guarda un audio en la conversación');
+    const audioMessage=await audioResponse.json();
+    assert.equal(audioMessage.attachments[0].kind,'audio');
+    const fileResponse=await sendMobileFile('documento.pdf','application/pdf',Buffer.from('%PDF-1.4\nFICTICIO\n%%EOF'));
+    assert.equal(fileResponse.status,201,'se guarda un documento en la conversación');
+    const fileMessage=await fileResponse.json();
+    assert.equal(fileMessage.attachments[0].kind,'file');
+    const historyResponse=await fetch(base+'/mobile/conversations/direct/'+teacherContact.id,{headers:{cookie:teacherMobile.cookie}});
+    assert.equal(historyResponse.status,200,'coordinación destinataria puede leer los adjuntos');
+    const history=(await historyResponse.json()).messages;
+    assert.ok(history.some(message=>message.attachments.some(file=>file.name==='nota.webm')));
+    const audioAttachment=history.flatMap(message=>message.attachments).find(file=>file.name==='nota.webm');
+    const audioDownload=await fetch(base+audioAttachment.downloadUrl,{headers:{cookie:teacherMobile.cookie,range:'bytes=0-3'}});
+    assert.equal(audioDownload.status,206,'el audio admite reproducción por rangos');
+    assert.equal(audioDownload.headers.get('content-type'),'audio/webm');
+    assert.deepEqual([...new Uint8Array(await audioDownload.arrayBuffer())],[0x1a,0x45,0xdf,0xa3]);
+    const privateDownload=await fetch(base+audioAttachment.downloadUrl);
+    assert.equal(privateDownload.status,401,'el adjunto no se descarga sin iniciar sesión');
+    const invalidFile=await sendMobileFile('falso.pdf','application/pdf',[0,1,2,3,4,5]);
+    assert.equal(invalidFile.status,400,'el servidor rechaza contenido que no coincide con su tipo');
   // Registration must not work without approved privacy version.
   r=await fetch(base+'/registro',{method:'POST',redirect:'manual',headers:{'content-type':'application/x-www-form-urlencoded',cookie},
    body:new URLSearchParams({csrf,role:'student',first_name:'Ficticio'})});

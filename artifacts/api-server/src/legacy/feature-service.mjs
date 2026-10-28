@@ -72,7 +72,7 @@ export async function multipart(req) {
  const limit=8*1024*1024;
  let count=0;
  const content=[];
- for await(const b of req){count+=b.length;if(count>limit)throw Error('Archivo demasiado grande. Máximo 8 MB.');content.push(b);}
+ for await(const b of req){count+=b.length;if(count>limit){const err=Error('Archivo demasiado grande. Máximo 8 MB.');err.status=413;throw err;}content.push(b);}
  const request=new Request('http://localhost/upload',{method:'POST',headers:{'Content-Type':req.headers['content-type']||''},body:Buffer.concat(content)});
  return request.formData();
 }
@@ -110,7 +110,7 @@ export function attachment(id,user){
 }
 export function readAttachment(f) {
  // DB is authoritative; never trust request path or user-supplied name.
- if(!/^[a-f0-9]{48}\.(pdf|jpg|png|webp|docx)$/.test(f.stored_name))throw Error('Ruta inválida.');
+ if(!/^[a-f0-9]{48}\.(pdf|jpg|png|webp|docx|webm|m4a|ogg|wav|mp3)$/.test(f.stored_name))throw Error('Ruta inválida.');
  return readFileSync(path.join(docsDir,f.stored_name));
 }
 export function queueMail(to,subject,body) {

@@ -296,7 +296,15 @@ export const GetMobileConversationMessagesResponse = zod.object({
   "senderId": zod.number().int(),
   "senderName": zod.string(),
   "content": zod.string(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "attachments": zod.array(zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "mime": zod.string(),
+  "bytes": zod.number().int(),
+  "kind": zod.enum(['audio', 'file']),
+  "downloadUrl": zod.string()
+}))
 }))
 })
 
@@ -322,8 +330,63 @@ export const SendMobileMessageResponse = zod.object({
   "senderId": zod.number().int(),
   "senderName": zod.string(),
   "content": zod.string(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "attachments": zod.array(zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "mime": zod.string(),
+  "bytes": zod.number().int(),
+  "kind": zod.enum(['audio', 'file']),
+  "downloadUrl": zod.string()
+}))
 })
+
+
+/**
+ * @summary Send a message with an attached file or audio
+ */
+
+export const sendMobileMessageAttachmentBodyContentMax = 2500;
+
+
+
+
+export const SendMobileMessageAttachmentBody = zod.object({
+  "kind": zod.enum(['direct', 'group']),
+  "targetId": zod.number().int().min(1),
+  "content": zod.string().max(sendMobileMessageAttachmentBodyContentMax).optional(),
+  "csrfToken": zod.string().min(1),
+  "file": zod.instanceof(Blob).optional()
+})
+
+export const SendMobileMessageAttachmentResponse = zod.object({
+  "id": zod.number().int(),
+  "senderId": zod.number().int(),
+  "senderName": zod.string(),
+  "content": zod.string(),
+  "createdAt": zod.string(),
+  "attachments": zod.array(zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "mime": zod.string(),
+  "bytes": zod.number().int(),
+  "kind": zod.enum(['audio', 'file']),
+  "downloadUrl": zod.string()
+}))
+})
+
+
+/**
+ * @summary Download an attachment from an authorized conversation
+ */
+
+
+
+export const GetMobileMessageAttachmentParams = zod.object({
+  "attachmentId": zod.coerce.number().int().min(1)
+})
+
+export const GetMobileMessageAttachmentResponse = zod.unknown()
 
 
 /**
