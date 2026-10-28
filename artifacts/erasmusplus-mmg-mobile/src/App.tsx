@@ -1,9 +1,9 @@
-import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDownToLine, ArrowLeft, ArrowRight, Bell, BookOpen, CalendarDays, Check,
   CheckCircle2, ChevronRight, FileText, Fingerprint, Home, LogIn, LogOut,
-  MessageCircle, Send, Settings, ShieldCheck, Users,
+  MessageCircle, Search, Send, Settings, ShieldCheck, Users, X,
 } from 'lucide-react';
 import {
   getGetMobileConversationDirectoryQueryKey, getGetMobileConversationMessagesQueryKey,
@@ -25,6 +25,23 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, sta
 const logo = `${import.meta.env.BASE_URL}erasmus-logo.png`;
 const dateLabel = (date: string | null | undefined) => date ? new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium' }).format(new Date(date)) : '';
 const dateTimeLabel = (date: string) => new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(date));
+const clockLabel = (date: string) => new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit' }).format(new Date(date));
+const conversationTimeLabel = (date: string | null | undefined) => {
+  if (!date) return '';
+  const value = new Date(date);
+  const today = new Date();
+  if (value.toDateString() === today.toDateString()) return clockLabel(date);
+  return new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short' }).format(value);
+};
+const messageDayLabel = (date: string) => {
+  const value = new Date(date);
+  const today = new Date();
+  if (value.toDateString() === today.toDateString()) return 'Hoy';
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (value.toDateString() === yesterday.toDateString()) return 'Ayer';
+  return new Intl.DateTimeFormat('es-ES', { dateStyle: 'long' }).format(value);
+};
 const fullName = (u: { firstName: string; lastName: string }) => `${u.firstName} ${u.lastName}`.trim();
 const roleLabel = (role: string) => ({ student: 'Estudiante', teacher: 'Docente', coordinator: 'Coordinación' }[role] ?? role);
 const initials = (name: string) => name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
@@ -70,8 +87,8 @@ function BottomNavigation({ user }: { user?: { firstName: string; lastName: stri
   return <nav className="bottom-nav" aria-label="Navegación móvil">{navigationItems.map(({ href, label, icon: Icon }) => <Link key={href} href={href} className={path.startsWith(href) ? 'active' : ''}><Icon /><span>{label}</span></Link>)}</nav>;
 }
 
-function PageFrame({ children, user }: { children: ReactNode; user?: { firstName: string; lastName: string } | null }) {
-  return <div className="app-shell"><Header user={user} /><main className="content">{children}<footer className="site-footer">Erasmus+ · IES Manuel Martín González</footer></main><BottomNavigation user={user} /></div>;
+function PageFrame({ children, user, className = '', showFooter = true }: { children: ReactNode; user?: { firstName: string; lastName: string } | null; className?: string; showFooter?: boolean }) {
+  return <div className="app-shell"><Header user={user} /><main className={`content ${className}`.trim()}>{children}{showFooter && <footer className="site-footer">Erasmus+ · IES Manuel Martín González</footer>}</main><BottomNavigation user={user} /></div>;
 }
 
 function LoadingState({ label = 'Cargando información' }: { label?: string }) {
@@ -223,19 +240,58 @@ function formatBytes(bytes: number) { return bytes < 1024 * 1024 ? `${Math.max(1
 
 function MessagesPage({ user }: { user: { firstName: string; lastName: string } }) {
   const query = useGetMobileConversationDirectory();
-  if (query.isLoading) return <PageFrame user={user}><LoadingState /></PageFrame>;
-  if (query.isError || !query.data) return <PageFrame user={user}><ErrorState retry={() => query.refetch()} /></PageFrame>;
+  const [filter, setFilter] = useState<'all' | 'groups' | 'contacts'>('all');
+  const [search, setSearch] = useState('');
+  if (query.isLoading) return <PageFrame user={user} className="inbox-content" showFooter={false}><LoadingState /></PageFrame>;
+  if (query.isError || !query.data) return <PageFrame user={user} className="inbox-content" showFooter={false}><ErrorState retry={() => query.refetch()} /></PageFrame>;
   const { contacts, groups } = query.data;
-  return <PageFrame user={user}><div className="messenger-top"><div><p className="eyebrow">IES MMG · Comunicación</p><h1 className="page-title">Mensajes</h1><p className="lede">Tus conversaciones autorizadas, en un solo lugar.</p></div><div className="messenger-topmark"><MessageCircle size={20} /></div></div>
-    <div className="messenger-tabs" aria-label="Secciones de mensajes"><a href="#groups">Grupos <span>{groups.length}</span></a><a href="#contacts">Contactos <span>{contacts.length}</span></a></div>
-    <section id="groups" className="messenger-section"><div className="section-head"><div><h2>Grupos</h2><p>Conversaciones de tus movilidades</p></div></div>
-      {groups.length ? <div className="conversation-list">{groups.map((group) => <Link key={group.id} href={`/mensajes/group/${group.id}`} className="conversation-row" data-testid={`conversation-group-${group.id}`}><div className="thread-avatar group-avatar"><Users size={19} /></div><div className="thread-details"><div className="thread-title"><strong>{group.title}</strong><time>{group.lastMessageAt ? dateTimeLabel(group.lastMessageAt) : ''}</time></div><span>{group.lastMessage || group.subtitle}</span><small>{group.subtitle}</small></div><ChevronRight className="row-end" size={17} /></Link>)}</div> : <EmptyState icon={Users} title="Sin conversaciones de grupo" detail="Las conversaciones de grupo disponibles aparecerán aquí." />}
-    </section>
-    <section id="contacts" className="messenger-section"><div className="section-head"><div><h2>Contactos</h2><p>Personas de tu entorno Erasmus+</p></div></div>
-      {contacts.length ? <div className="conversation-list">{contacts.map((contact) => {
-        const title = fullName(contact);
-        return <Link key={contact.id} href={`/mensajes/direct/${contact.id}`} className="conversation-row" data-testid={`conversation-contact-${contact.id}`}><div className="thread-avatar">{initials(title)}</div><div className="thread-details"><div className="thread-title"><strong>{title}</strong></div><span>{contact.role}{contact.editionLabel ? ` · ${contact.editionLabel}` : ''}</span></div><ChevronRight className="row-end" size={17} /></Link>;
-      })}</div> : <EmptyState icon={MessageCircle} title="Sin contactos disponibles" detail="No hay contactos habilitados para tu cuenta en este momento." />}
+  const term = search.trim().toLocaleLowerCase('es');
+  const visibleGroups = groups.filter((group) => !term || `${group.title} ${group.subtitle} ${group.lastMessage ?? ''}`.toLocaleLowerCase('es').includes(term));
+  const visibleContacts = contacts.filter((contact) => !term || `${fullName(contact)} ${contact.role} ${contact.editionLabel ?? ''}`.toLocaleLowerCase('es').includes(term));
+  const total = groups.length + contacts.length;
+  const shown = (filter !== 'contacts' && visibleGroups.length > 0) || (filter !== 'groups' && visibleContacts.length > 0);
+  return <PageFrame user={user} className="inbox-content" showFooter={false}>
+    <section className="inbox-screen" aria-labelledby="messages-title">
+      <header className="inbox-heading">
+        <div>
+          <p className="eyebrow">IES MMG · Erasmus+</p>
+          <div className="inbox-title-line"><h1 id="messages-title" className="page-title">Mensajes</h1><span className="inbox-total">{total} conversaciones</span></div>
+          <p className="lede">Grupos y contactos de tu convocatoria.</p>
+        </div>
+        <div className="inbox-mark" aria-hidden="true"><MessageCircle size={19} /></div>
+      </header>
+      <label className="inbox-search">
+        <Search size={17} aria-hidden="true" />
+        <input data-testid="input-message-search" type="search" aria-label="Buscar conversaciones" placeholder="Buscar conversaciones" value={search} onChange={(event) => setSearch(event.target.value)} />
+        {search && <button type="button" className="search-clear" aria-label="Borrar búsqueda" data-testid="button-clear-message-search" onClick={() => setSearch('')}><X size={15} /></button>}
+      </label>
+      <div className="inbox-filters" role="group" aria-label="Filtrar conversaciones">
+        <button type="button" aria-pressed={filter === 'all'} className={filter === 'all' ? 'active' : ''} data-testid="filter-all-conversations" onClick={() => setFilter('all')}>Todos <span>{total}</span></button>
+        <button type="button" aria-pressed={filter === 'groups'} className={filter === 'groups' ? 'active' : ''} data-testid="filter-group-conversations" onClick={() => setFilter('groups')}>Grupos <span>{groups.length}</span></button>
+        <button type="button" aria-pressed={filter === 'contacts'} className={filter === 'contacts' ? 'active' : ''} data-testid="filter-direct-conversations" onClick={() => setFilter('contacts')}>Personas <span>{contacts.length}</span></button>
+      </div>
+      <div className="inbox-list" aria-label="Conversaciones">
+        {!shown ? <div className="inbox-empty"><div className="inbox-empty-mark"><Search size={20} /></div><strong>{term ? 'No hay resultados' : 'Aún no hay conversaciones'}</strong><p>{term ? 'Prueba con otro nombre o grupo.' : 'Aquí aparecerán los grupos y contactos autorizados de tu convocatoria.'}</p></div> : <>
+          {filter !== 'contacts' && visibleGroups.length > 0 && <section className="conversation-section" aria-label="Grupos">
+            {filter === 'all' && <div className="conversation-section-title"><span>Grupos</span><span>{visibleGroups.length}</span></div>}
+            {visibleGroups.map((group) => <Link key={group.id} href={`/mensajes/group/${group.id}`} className="conversation-row" data-testid={`conversation-group-${group.id}`} aria-label={`${group.title}. ${group.lastMessage || group.subtitle}`}>
+              <span className="conversation-avatar group"><Users size={19} /></span>
+              <span className="conversation-row-copy"><span className="conversation-row-title"><strong>{group.title}</strong><time>{conversationTimeLabel(group.lastMessageAt)}</time></span><span className="conversation-row-preview">{group.lastMessage || group.subtitle}</span><span className="conversation-row-detail">{group.subtitle}</span></span>
+            </Link>)}
+          </section>}
+          {filter !== 'groups' && visibleContacts.length > 0 && <section className="conversation-section" aria-label="Personas">
+            {filter === 'all' && <div className="conversation-section-title"><span>Personas</span><span>{visibleContacts.length}</span></div>}
+            {visibleContacts.map((contact) => {
+              const title = fullName(contact);
+              const detail = `${roleLabel(contact.role)}${contact.editionLabel ? ` · ${contact.editionLabel}` : ''}`;
+              return <Link key={contact.id} href={`/mensajes/direct/${contact.id}`} className="conversation-row" data-testid={`conversation-contact-${contact.id}`} aria-label={`${title}. ${detail}`}>
+                <span className="conversation-avatar">{initials(title)}</span>
+                <span className="conversation-row-copy"><span className="conversation-row-title"><strong>{title}</strong></span><span className="conversation-row-preview">{detail}</span><span className="conversation-row-detail">Mensaje directo</span></span>
+              </Link>;
+            })}
+          </section>}
+        </>}
+      </div>
     </section>
   </PageFrame>;
 }
@@ -251,7 +307,8 @@ function ConversationPage({ user, csrfToken }: { user: { id: number; firstName: 
   const [, setLocation] = useLocation();
   const [content, setContent] = useState('');
   const [error, setError] = useState('');
-  useEffect(() => { const el = document.querySelector('.messages'); if (el) el.scrollTop = el.scrollHeight; }, [query.data?.messages.length]);
+  const messageThreadRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { const el = messageThreadRef.current; if (el) el.scrollTop = el.scrollHeight; }, [id, kind, query.data?.messages.length]);
   const send = (event: FormEvent) => {
     event.preventDefault();
     const message = content.trim();
@@ -261,18 +318,35 @@ function ConversationPage({ user, csrfToken }: { user: { id: number; firstName: 
       onError: () => setError('No se ha podido enviar el mensaje. Vuelve a intentarlo.'),
     });
   };
-  if (!valid) return <PageFrame user={user}><ErrorState retry={() => setLocation('/mensajes')} text="Esta conversación no está disponible." /></PageFrame>;
-  return <PageFrame user={user}>
-    {query.isLoading ? <LoadingState /> : query.isError || !query.data ? <ErrorState retry={() => query.refetch()} /> : <>
-      <div className="chat-toolbar"><Link href="/mensajes" className="chat-back" aria-label="Volver a mensajes"><ArrowLeft size={19} /></Link><div className="thread-avatar">{kind === 'group' ? <Users size={19} /> : initials(query.data.title)}</div><div className="chat-title"><h1>{query.data.title}</h1><span>{kind === 'group' ? 'Grupo autorizado' : 'Mensaje directo'}</span></div></div>
-      <div className="status policy-note" role="note">
-        Según el protocolo del centro, Coordinación puede supervisar los mensajes de esta conversación. El acceso queda registrado. No se crean copias ocultas de los mensajes.
+  if (!valid) return <PageFrame user={user} className="chat-content" showFooter={false}><ErrorState retry={() => setLocation('/mensajes')} text="Esta conversación no está disponible." /></PageFrame>;
+  return <PageFrame user={user} className="chat-content" showFooter={false}>
+    {query.isLoading ? <LoadingState /> : query.isError || !query.data ? <ErrorState retry={() => query.refetch()} /> : <section className="chat-screen" aria-label={`Conversación con ${query.data.title}`}>
+      <header className="chat-header">
+        <Link href="/mensajes" className="chat-back" aria-label="Volver a mensajes" data-testid="link-back-to-messages"><ArrowLeft size={19} /></Link>
+        <span className={`chat-avatar${kind === 'group' ? ' group' : ''}`}>{kind === 'group' ? <Users size={19} /> : initials(query.data.title)}</span>
+        <span className="chat-header-copy"><strong>{query.data.title}</strong><small>{kind === 'group' ? 'Grupo autorizado' : 'Mensaje directo'}</small></span>
+      </header>
+      <aside className="chat-policy" role="note">
+        <ShieldCheck size={16} aria-hidden="true" />
+        <span><strong>Comunicación supervisada</strong><small>Coordinación puede supervisar esta conversación según el protocolo del centro. El acceso queda registrado. No se crean copias ocultas.</small></span>
+      </aside>
+      <div className="chat-thread" ref={messageThreadRef} role="log" aria-live="polite" aria-relevant="additions text">
+        {query.data.messages.length ? query.data.messages.map((message) => {
+          const mine = message.senderId === user.id;
+          return <article className={`chat-message${mine ? ' mine' : ''}`} key={message.id} data-testid={`message-${message.id}`}>
+            {!mine && <strong className="chat-sender">{message.senderName}</strong>}
+            <p>{message.content}</p>
+            <time>{clockLabel(message.createdAt)}</time>
+          </article>;
+        }) : <div className="chat-empty"><div className="chat-empty-mark"><MessageCircle size={20} /></div><strong>Empieza la conversación</strong><p>Tu mensaje será visible para las personas autorizadas en este espacio.</p></div>}
       </div>
-      <div className="messages" aria-live="polite">{query.data.messages.length ? query.data.messages.map((message) => <article className={`message ${message.senderId === user.id ? 'mine' : ''}`} key={message.id}>{message.senderId !== user.id && <strong>{message.senderName}</strong>}<p>{message.content}</p><time>{dateTimeLabel(message.createdAt)}</time></article>) : <div className="empty"><div className="empty-mark"><MessageCircle size={19} /></div><strong>Empieza la conversación</strong><p>Tu mensaje será visible para las personas de este espacio.</p></div>}</div>
-      {error && <div className="status error" role="alert">{error}</div>}
-      <form className="composer" onSubmit={send}><textarea data-testid="input-message" aria-label="Escribe un mensaje" maxLength={2500} placeholder="Escribe un mensaje…" value={content} onChange={(e) => setContent(e.target.value)} /><button className="button" data-testid="button-send-message" aria-label="Enviar mensaje" disabled={!content.trim() || mutation.isPending}><Send size={18} /></button></form>
-      <p className="message-hint">Los mensajes se comparten solo con las personas autorizadas.</p>
-    </>}
+      {error && <div className="chat-error" role="alert">{error}</div>}
+      <form className="chat-composer" onSubmit={send}>
+        <textarea data-testid="input-message" aria-label="Escribe un mensaje" maxLength={2500} rows={1} placeholder="Escribe un mensaje…" value={content} onChange={(event) => setContent(event.target.value)} />
+        <button className="send-button" data-testid="button-send-message" aria-label="Enviar mensaje" disabled={!content.trim() || mutation.isPending}><Send size={17} /></button>
+      </form>
+      <p className="chat-hint">Solo las personas autorizadas pueden ver este chat.</p>
+    </section>}
   </PageFrame>;
 }
 
