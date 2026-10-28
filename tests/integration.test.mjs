@@ -223,7 +223,8 @@ test('MVP: creación del coordinador y controles básicos',async ()=>{
      return {cookie:response.headers.get('set-cookie')?.split(';')[0],csrfToken:data.csrfToken};
     }
     const studentMobile=await loginMobile('TESTALUMNO');
-    const coordinatorMobile=await loginMobile('TESTADMIN');
+    const coordinatorBootstrap=await fetch(base+'/mobile/session',{headers:{cookie:session}});
+    const coordinatorMobile={cookie:session,csrfToken:(await coordinatorBootstrap.json()).csrfToken};
     const directory=await fetch(base+'/mobile/conversations',{headers:{cookie:studentMobile.cookie}});
     assert.equal(directory.status,200);
     const studentDirectory=(await directory.json()).contacts;
@@ -250,16 +251,17 @@ test('MVP: creación del coordinador y controles básicos',async ()=>{
     assert.equal(fileResponse.status,201,'se guarda un documento en la conversación');
     const fileMessage=await fileResponse.json();
     assert.equal(fileMessage.attachments[0].kind,'file');
-    const historyResponse=await fetch(base+'/mobile/conversations/direct/'+teacherContact.id,{headers:{cookie:teacherMobile.cookie}});
+    const historyResponse=await fetch(base+'/mobile/conversations/direct/'+studentContact.id,{headers:{cookie:coordinatorMobile.cookie}});
     assert.equal(historyResponse.status,200,'coordinación destinataria puede leer los adjuntos');
     const history=(await historyResponse.json()).messages;
     assert.ok(history.some(message=>message.attachments.some(file=>file.name==='nota.webm')));
     const audioAttachment=history.flatMap(message=>message.attachments).find(file=>file.name==='nota.webm');
-    const audioDownload=await fetch(base+audioAttachment.downloadUrl,{headers:{cookie:teacherMobile.cookie,range:'bytes=0-3'}});
+    const localDownloadUrl=audioAttachment.downloadUrl.replace(/^\/api/,'');
+    const audioDownload=await fetch(base+localDownloadUrl,{headers:{cookie:coordinatorMobile.cookie,range:'bytes=0-3'}});
     assert.equal(audioDownload.status,206,'el audio admite reproducción por rangos');
     assert.equal(audioDownload.headers.get('content-type'),'audio/webm');
     assert.deepEqual([...new Uint8Array(await audioDownload.arrayBuffer())],[0x1a,0x45,0xdf,0xa3]);
-    const privateDownload=await fetch(base+audioAttachment.downloadUrl);
+    const privateDownload=await fetch(base+localDownloadUrl);
     assert.equal(privateDownload.status,401,'el adjunto no se descarga sin iniciar sesión');
     const invalidFile=await sendMobileFile('falso.pdf','application/pdf',[0,1,2,3,4,5]);
     assert.equal(invalidFile.status,400,'el servidor rechaza contenido que no coincide con su tipo');

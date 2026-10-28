@@ -2,3 +2,4 @@
 - [SQLite mutation checks](sqlite-mutation-checks.md) — verify persisted state after updates; a successful response can hide a bind-count mistake.
 - [Generated browser headers](orval-dom-iterable.md) — Orval's fetch output calls `Headers.entries()`, so client typechecks need `DOM.Iterable`.
 - [Erasmus+ mobile PWA scope](mobile-pwa-scope.md) — keep the mobile app functional and user-focused; visitor promotion belongs on desktop.
+- [Erasmus+ media storage](erasmus-media-storage.md) — preserve MMG accounts, SQLite, and Ubuntu storage unless cloud-storage migration is explicitly approved.
