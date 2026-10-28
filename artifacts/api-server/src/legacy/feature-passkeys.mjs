@@ -16,14 +16,20 @@ db.exec(
  "challenge TEXT NOT NULL,purpose TEXT NOT NULL,expires_at INTEGER NOT NULL);" +
  "CREATE INDEX IF NOT EXISTS passkey_by_user ON passkey_credentials(user_id);"
 );
-function config(){
- const rpID=String(process.env.MMG_PASSKEY_RPID||'').trim();
- const origin=String(process.env.MMG_PASSKEY_ORIGIN||'').trim();
- if(!rpID||!origin)throw Error('Configura MMG_PASSKEY_RPID y MMG_PASSKEY_ORIGIN después de activar HTTPS.');
- const u=new URL(origin);
+function config(req){
+ const requestOrigin=String(req.headers.origin||'').trim();
+ const origin=String(process.env.MMG_PASSKEY_ORIGIN||requestOrigin).trim();
+ let u;
+ try{u=new URL(origin);}catch{throw Error('No se pudo validar el origen seguro de WebAuthn.');}
+ const rpID=String(process.env.MMG_PASSKEY_RPID||u.hostname).trim();
  if((u.protocol!=='https:' && !(u.hostname==='localhost'&&u.protocol==='http:')) ||
    u.hostname!==rpID || u.pathname!=='/' || u.search || u.hash)
    throw Error('La configuración WebAuthn requiere un dominio y origen HTTPS coincidentes.');
+ if(requestOrigin){
+  let incoming;
+  try{incoming=new URL(requestOrigin);}catch{throw Error('El origen de la solicitud no es válido.');}
+  if(incoming.origin!==u.origin)throw Error('La solicitud no procede del origen WebAuthn configurado.');
+ }
  return {rpID,origin:u.origin};
 }
 function respond(req,api,status,obj,headers={}){
@@ -71,10 +77,10 @@ export async function passkeyRoutes(req,url,method,api){
  }
  if(method!=='POST'){api.error(req,405,'Método no permitido.');return true;}
  let body;
- try{body=await bodyJSON(req);}catch{respond(req,400,{error:'Datos JSON inválidos.'});return true;}
+ try{body=await bodyJSON(req);}catch{respond(req,api,400,{error:'Datos JSON inválidos.'});return true;}
  if(!csrf(req,body,api))return true;
  let conf;
- try{conf=config();}catch(e){respond(req,503,{error:e.message});return true;}
+  try{conf=config(req);}catch(e){respond(req,api,503,{error:e.message});return true;}
  try{
  if(url==='/passkeys/registro/iniciar'){
   if(!api.mustLogin(req))return true;
@@ -90,29 +96,29 @@ export async function passkeyRoutes(req,url,method,api){
   const attempt=crypto.randomBytes(24).toString('hex');
   run("INSERT INTO passkey_challenges(id,user_id,challenge,purpose,expires_at) VALUES (?,?,?,'register',?)",
    attempt,u.id,options.challenge,Date.now()+5*60*1000);
-  respond(req,200,{options,attempt});return true;
+  respond(req,api,200,{options,attempt});return true;
  }
  if(url==='/passkeys/registro/terminar'){
   if(!api.mustLogin(req))return true;
   const attempt=String(body.attempt||''),row=get("SELECT * FROM passkey_challenges WHERE id=? AND user_id=? AND purpose='register'",
     attempt,req.auth.user.id);
-  if(!row||row.expires_at<Date.now()){respond(req,400,{error:'Reto de registro caducado.'});return true;}
+  if(!row||row.expires_at<Date.now()){respond(req,api,400,{error:'Reto de registro caducado.'});return true;}
   run('DELETE FROM passkey_challenges WHERE id=?',attempt);
   const result=await verifyRegistrationResponse({
     response:body.response,expectedChallenge:row.challenge,expectedOrigin:conf.origin,
     expectedRPID:conf.rpID,requireUserVerification:true
   });
-  if(!result.verified||!result.registrationInfo?.credential){respond(req,400,{error:'No se pudo verificar la credencial.'});return true;}
+  if(!result.verified||!result.registrationInfo?.credential){respond(req,api,400,{error:'No se pudo verificar la credencial.'});return true;}
   const c=result.registrationInfo.credential;
   run('INSERT INTO passkey_credentials(id,user_id,public_key,counter,transports) VALUES (?,?,?,?,?)',
     c.id,req.auth.user.id,Buffer.from(c.publicKey).toString('base64'),c.counter,JSON.stringify(c.transports||[]));
   audit(req.auth.user.id,'passkey_registered');
-  respond(req,200,{ok:true});return true;
+  respond(req,api,200,{ok:true});return true;
  }
  if(url==='/passkeys/acceso/iniciar'){
   const username=String(body.username||'').trim().toUpperCase();
   const u=get("SELECT * FROM users WHERE username=? AND status='approved'",username);
-  if(!u||currentCredentials(u.id).length===0){respond(req,400,{error:'No se puede iniciar sesión con passkey para esta cuenta.'});return true;}
+  if(!u||currentCredentials(u.id).length===0){respond(req,api,400,{error:'No se puede iniciar sesión con passkey para esta cuenta.'});return true;}
   const creds=currentCredentials(u.id);
   const options=await generateAuthenticationOptions({
    rpID:conf.rpID,userVerification:'required',
@@ -121,32 +127,32 @@ export async function passkeyRoutes(req,url,method,api){
   const attempt=crypto.randomBytes(24).toString('hex');
   run("INSERT INTO passkey_challenges(id,user_id,challenge,purpose,expires_at) VALUES (?,?,?,'authenticate',?)",
    attempt,u.id,options.challenge,Date.now()+5*60*1000);
-  respond(req,200,{options,attempt});return true;
+  respond(req,api,200,{options,attempt});return true;
  }
  if(url==='/passkeys/acceso/terminar'){
   const attempt=String(body.attempt||'');
   const row=get("SELECT * FROM passkey_challenges WHERE id=? AND purpose='authenticate'",attempt);
-  if(!row||row.expires_at<Date.now()){respond(req,400,{error:'Reto de acceso caducado.'});return true;}
+  if(!row||row.expires_at<Date.now()){respond(req,api,400,{error:'Reto de acceso caducado.'});return true;}
   run('DELETE FROM passkey_challenges WHERE id=?',attempt);
   const u=get("SELECT * FROM users WHERE id=? AND status='approved'",row.user_id);
   const c=u&&get('SELECT * FROM passkey_credentials WHERE id=? AND user_id=?',String(body.response?.id||''),u.id);
-  if(!c){respond(req,403,{error:'Credencial no autorizada.'});return true;}
-  if(u.role!=='coordinator'&&!u.email_verified_at){respond(req,403,{error:'Correo no verificado.'});return true;}
+  if(!c){respond(req,api,403,{error:'Credencial no autorizada.'});return true;}
+  if(u.role!=='coordinator'&&!u.email_verified_at){respond(req,api,403,{error:'Correo no verificado.'});return true;}
   const result=await verifyAuthenticationResponse({
    response:body.response,expectedChallenge:row.challenge,expectedOrigin:conf.origin,expectedRPID:conf.rpID,
    credential:{id:c.id,publicKey:Buffer.from(c.public_key,'base64'),counter:c.counter,transports:JSON.parse(c.transports||'[]')},
    requireUserVerification:true
   });
-  if(!result.verified){respond(req,403,{error:'No se pudo verificar la credencial.'});return true;}
+  if(!result.verified){respond(req,api,403,{error:'No se pudo verificar la credencial.'});return true;}
   run('UPDATE passkey_credentials SET counter=? WHERE id=?',result.authenticationInfo.newCounter,c.id);
   audit(u.id,'passkey_login',u.id);
   const cval=newSession(u.id);
-  respond(req,200,{ok:true,redirect:u.role==='coordinator'?'/coordinacion':'/panel'},{'Set-Cookie':cval});
+  respond(req,api,200,{ok:true,redirect:u.role==='coordinator'?'/coordinacion':'/panel'},{'Set-Cookie':cval});
   return true;
  }
  }catch(e){
   console.error('Passkeys:',e.message);
-  respond(req,400,{error:'Operación biométrica no completada. Revisa el dispositivo y la configuración HTTPS.'});return true;
+  respond(req,api,400,{error:'Operación biométrica no completada. Revisa el dispositivo y la configuración HTTPS.'});return true;
  }
  api.error(req,404,'Ruta desconocida.');return true;
 }

@@ -26,6 +26,12 @@ function readConfig(k) {
 function saveConfig(k,value) {
   run("INSERT INTO configuration(name,encrypted_value,updated_at) VALUES (?,?,CURRENT_TIMESTAMP) ON CONFLICT(name) DO UPDATE SET encrypted_value=excluded.encrypted_value,updated_at=CURRENT_TIMESTAMP",k,encrypt(value));
 }
+export function readSecureConfig(k) {
+  return readConfig(k);
+}
+export function saveSecureConfig(k,value) {
+  saveConfig(k,value);
+}
 export function settings() {
   return {
     configured:Boolean(readConfig('resend_api_key') && readConfig('from_email') && readConfig('public_url')),

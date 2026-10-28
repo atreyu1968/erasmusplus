@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/movil/"
+title = "Erasmus+ MMG Móvil"
+description = "PWA móvil para visitantes, alumnado, docentes y coordinación del programa Erasmus+ del IES Manuel Martín González, con mensajería y notificaciones web."
+version = "1.0.0"
+id = "artifacts/erasmusplus-mmg-mobile"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/movil/" ]
+localPort = 22577
+
+[services.development]
+run = "pnpm --filter @workspace/erasmusplus-mmg-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/erasmusplus-mmg-mobile", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/erasmusplus-mmg-mobile/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22577"
+BASE_PATH = "/movil/"

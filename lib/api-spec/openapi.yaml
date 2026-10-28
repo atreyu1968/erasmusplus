@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: mobile
+    description: Mobile PWA operations
 paths:
   /healthz:
     get:
@@ -24,7 +26,461 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /mobile/session:
+    get:
+      operationId: getMobileSession
+      tags: [mobile]
+      summary: Get current mobile session
+      responses:
+        "200":
+          description: Session status and CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobileSession"
+    post:
+      operationId: createMobileSession
+      tags: [mobile]
+      summary: Sign in to the mobile app
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileLogin"
+      responses:
+        "200":
+          description: Signed-in session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobileSession"
+        "401":
+          description: Credentials are not valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Account is not approved or verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteMobileSession
+      tags: [mobile]
+      summary: Sign out of the mobile app
+      security:
+        - mmgSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileLogout"
+      responses:
+        "204":
+          description: Session ended
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/passkeys:
+    get:
+      operationId: getMobilePasskeys
+      tags: [mobile]
+      summary: List the signed-in user's biometric credentials
+      security:
+        - mmgSession: []
+      responses:
+        "200":
+          description: Registered credentials without private key material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobilePasskeys"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/passkeys/login/start:
+    post:
+      operationId: startMobilePasskeyLogin
+      tags: [mobile]
+      summary: Begin biometric sign-in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobilePasskeyLoginStartInput"
+      responses:
+        "200":
+          description: WebAuthn challenge options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobilePasskeyStartResult"
+        "400":
+          description: No registered credential for this account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: WebAuthn origin is not configured for this request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/passkeys/login/finish:
+    post:
+      operationId: finishMobilePasskeyLogin
+      tags: [mobile]
+      summary: Complete biometric sign-in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobilePasskeyFinishInput"
+      responses:
+        "200":
+          description: Session cookie issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobilePasskeyResult"
+        "400":
+          description: Challenge expired or credential verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/passkeys/register/start:
+    post:
+      operationId: startMobilePasskeyRegistration
+      tags: [mobile]
+      summary: Begin registering this device
+      security:
+        - mmgSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobilePasskeyRegisterStartInput"
+      responses:
+        "200":
+          description: WebAuthn registration options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobilePasskeyStartResult"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: WebAuthn origin is not configured for this request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/passkeys/register/finish:
+    post:
+      operationId: finishMobilePasskeyRegistration
+      tags: [mobile]
+      summary: Complete registering this device
+      security:
+        - mmgSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobilePasskeyFinishInput"
+      responses:
+        "200":
+          description: Credential registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobilePasskeyResult"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/passkeys/{credentialId}:
+    delete:
+      operationId: deleteMobilePasskey
+      tags: [mobile]
+      summary: Remove a biometric credential from this account
+      security:
+        - mmgSession: []
+      parameters:
+        - name: credentialId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobilePasskeyDeleteInput"
+      responses:
+        "204":
+          description: Credential removed
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/dashboard:
+    get:
+      operationId: getMobileDashboard
+      tags: [mobile]
+      summary: Get role-specific account dashboard
+      security:
+        - mmgSession: []
+      responses:
+        "200":
+          description: Dashboard scoped to the signed-in user's edition and role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobileDashboard"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/documents:
+    get:
+      operationId: getMobileDocuments
+      tags: [mobile]
+      summary: List documents available to the signed-in user
+      security:
+        - mmgSession: []
+      responses:
+        "200":
+          description: Documents filtered by account, group, and notice access
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobileDocuments"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/conversations:
+    get:
+      operationId: getMobileConversationDirectory
+      tags: [mobile]
+      summary: List direct contacts and authorized group conversations
+      security:
+        - mmgSession: []
+      responses:
+        "200":
+          description: Contacts and groups visible to the signed-in user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationDirectory"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/conversations/{kind}/{targetId}:
+    get:
+      operationId: getMobileConversationMessages
+      tags: [mobile]
+      summary: Read an authorized conversation
+      security:
+        - mmgSession: []
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [direct, group]
+        - name: targetId
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Conversation and recent messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationHistory"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Conversation is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/messages:
+    post:
+      operationId: sendMobileMessage
+      tags: [mobile]
+      summary: Send a direct or group message
+      security:
+        - mmgSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileMessageInput"
+      responses:
+        "201":
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobileMessage"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Conversation is not available to this account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/tasks/{taskId}/complete:
+    post:
+      operationId: completeMobileTask
+      tags: [mobile]
+      summary: Mark an assigned task as complete
+      security:
+        - mmgSession: []
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileAction"
+      responses:
+        "204":
+          description: Task marked complete
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Task is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /mobile/push/config:
+    get:
+      operationId: getMobilePushConfig
+      tags: [mobile]
+      summary: Get browser push notification configuration
+      responses:
+        "200":
+          description: Public push key and server readiness
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobilePushConfig"
+  /mobile/push/subscription:
+    put:
+      operationId: saveMobilePushSubscription
+      tags: [mobile]
+      summary: Register this browser for message notifications
+      security:
+        - mmgSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobilePushSubscriptionInput"
+      responses:
+        "204":
+          description: Browser subscription saved
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteMobilePushSubscription
+      tags: [mobile]
+      summary: Remove this browser's message notifications
+      security:
+        - mmgSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobilePushUnsubscribeInput"
+      responses:
+        "204":
+          description: Browser subscription removed
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
+  securitySchemes:
+    mmgSession:
+      type: apiKey
+      in: cookie
+      name: mmg_session
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +489,386 @@ components:
           type: string
       required:
         - status
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    MobileUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        role:
+          type: string
+          enum: [student, teacher, coordinator]
+        editionLabel:
+          type: [string, "null"]
+      required: [id, firstName, lastName, role, editionLabel]
+    MobileSession:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+        csrfToken:
+          type: string
+        user:
+          oneOf:
+            - $ref: "#/components/schemas/MobileUser"
+            - type: "null"
+      required: [authenticated, csrfToken, user]
+    MobileLogin:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 100
+        password:
+          type: string
+          minLength: 1
+          maxLength: 200
+        csrfToken:
+          type: string
+          minLength: 1
+      required: [username, password, csrfToken]
+    MobileLogout:
+      type: object
+      properties:
+        csrfToken:
+          type: string
+          minLength: 1
+      required: [csrfToken]
+    MobileAction:
+      type: object
+      properties:
+        csrfToken:
+          type: string
+          minLength: 1
+      required: [csrfToken]
+    LandingContent:
+      type: object
+      properties:
+        title: { type: string }
+        eyebrow: { type: string }
+        heroTitle: { type: string }
+        heroDescription: { type: string }
+        heroImageUrl: { type: [string, "null"] }
+        aboutTitle: { type: string }
+        aboutText: { type: string }
+        destinationsTitle: { type: string }
+        destinationsDescription: { type: string }
+        galleryTitle: { type: string }
+        galleryDescription: { type: string }
+        contactTitle: { type: string }
+        contactDescription: { type: string }
+        contactEmail: { type: [string, "null"] }
+        contactPhone: { type: [string, "null"] }
+        address: { type: [string, "null"] }
+        socialInstagram: { type: [string, "null"] }
+        socialFacebook: { type: [string, "null"] }
+        socialYoutube: { type: [string, "null"] }
+      required:
+        - title
+        - eyebrow
+        - heroTitle
+        - heroDescription
+        - heroImageUrl
+        - aboutTitle
+        - aboutText
+        - destinationsTitle
+        - destinationsDescription
+        - galleryTitle
+        - galleryDescription
+        - contactTitle
+        - contactDescription
+        - contactEmail
+        - contactPhone
+        - address
+        - socialInstagram
+        - socialFacebook
+        - socialYoutube
+    MobileDestination:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        country: { type: string }
+        description: { type: string }
+        imageUrl: { type: [string, "null"] }
+        imageAlt: { type: string }
+        modes:
+          type: array
+          items: { type: string }
+        families:
+          type: array
+          items: { type: string }
+      required: [id, name, country, description, imageUrl, imageAlt, modes, families]
+    MobileGalleryItem:
+      type: object
+      properties:
+        id: { type: integer }
+        albumTitle: { type: string }
+        caption: { type: string }
+        imageUrl: { type: string }
+        imageAlt: { type: string }
+      required: [id, albumTitle, caption, imageUrl, imageAlt]
+    MobilePublicContent:
+      type: object
+      properties:
+        editionLabel: { type: [string, "null"] }
+        landing:
+          $ref: "#/components/schemas/LandingContent"
+        destinations:
+          type: array
+          items: { $ref: "#/components/schemas/MobileDestination" }
+        gallery:
+          type: array
+          items: { $ref: "#/components/schemas/MobileGalleryItem" }
+      required: [editionLabel, landing, destinations, gallery]
+    MobileApplication:
+      type: object
+      properties:
+        id: { type: integer }
+        mobility: { type: string }
+        editionLabel: { type: [string, "null"] }
+        destination: { type: string }
+        status: { type: string }
+        decision: { type: [string, "null"] }
+      required: [id, mobility, editionLabel, destination, status, decision]
+    MobileGroup:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        destination: { type: string }
+        type: { type: string }
+        editionLabel: { type: string }
+      required: [id, name, destination, type, editionLabel]
+    MobileEvent:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        kind: { type: string }
+        startTime: { type: string }
+        endTime: { type: [string, "null"] }
+        location: { type: string }
+        groupName: { type: string }
+      required: [id, title, kind, startTime, endTime, location, groupName]
+    MobileTask:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        description: { type: string }
+        dueDate: { type: [string, "null"] }
+        completed: { type: boolean }
+        groupName: { type: string }
+      required: [id, title, description, dueDate, completed, groupName]
+    MobileNotice:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        body: { type: string }
+        createdAt: { type: string }
+      required: [id, title, body, createdAt]
+    MobileSummary:
+      type: object
+      properties:
+        applications: { type: integer }
+        groups: { type: integer }
+        pendingTasks: { type: integer }
+        upcomingEvents: { type: integer }
+        notices: { type: integer }
+        pendingApplicants: { type: integer }
+      required: [applications, groups, pendingTasks, upcomingEvents, notices, pendingApplicants]
+    MobileDashboard:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/MobileUser"
+        summary:
+          $ref: "#/components/schemas/MobileSummary"
+        applications:
+          type: array
+          items: { $ref: "#/components/schemas/MobileApplication" }
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/MobileGroup" }
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/MobileEvent" }
+        tasks:
+          type: array
+          items: { $ref: "#/components/schemas/MobileTask" }
+        notices:
+          type: array
+          items: { $ref: "#/components/schemas/MobileNotice" }
+      required: [user, summary, applications, groups, events, tasks, notices]
+    MobileDocument:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        mime: { type: string }
+        bytes: { type: integer }
+        createdAt: { type: string }
+        source: { type: string }
+        downloadUrl: { type: string }
+      required: [id, name, mime, bytes, createdAt, source, downloadUrl]
+    MobileDocuments:
+      type: object
+      properties:
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/MobileDocument" }
+      required: [documents]
+    MobileContact:
+      type: object
+      properties:
+        id: { type: integer }
+        firstName: { type: string }
+        lastName: { type: string }
+        role: { type: string }
+        editionLabel: { type: [string, "null"] }
+      required: [id, firstName, lastName, role, editionLabel]
+    MobileConversation:
+      type: object
+      properties:
+        id: { type: integer }
+        kind:
+          type: string
+          enum: [direct, group]
+        title: { type: string }
+        subtitle: { type: string }
+        lastMessage: { type: [string, "null"] }
+        lastMessageAt: { type: [string, "null"] }
+      required: [id, kind, title, subtitle, lastMessage, lastMessageAt]
+    ConversationDirectory:
+      type: object
+      properties:
+        contacts:
+          type: array
+          items: { $ref: "#/components/schemas/MobileContact" }
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/MobileConversation" }
+      required: [contacts, groups]
+    MobileMessage:
+      type: object
+      properties:
+        id: { type: integer }
+        senderId: { type: integer }
+        senderName: { type: string }
+        content: { type: string }
+        createdAt: { type: string }
+      required: [id, senderId, senderName, content, createdAt]
+    ConversationHistory:
+      type: object
+      properties:
+        id: { type: integer }
+        kind:
+          type: string
+          enum: [direct, group]
+        title: { type: string }
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/MobileMessage" }
+      required: [id, kind, title, messages]
+    MobileMessageInput:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [direct, group]
+        targetId: { type: integer, minimum: 1 }
+        content: { type: string, minLength: 1, maxLength: 2500 }
+        csrfToken: { type: string, minLength: 1 }
+      required: [kind, targetId, content, csrfToken]
+    MobilePushConfig:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        publicKey: { type: [string, "null"] }
+      required: [enabled, publicKey]
+    MobilePushKeys:
+      type: object
+      properties:
+        p256dh: { type: string, minLength: 1, maxLength: 200 }
+        auth: { type: string, minLength: 1, maxLength: 100 }
+      required: [p256dh, auth]
+    MobilePushSubscriptionInput:
+      type: object
+      properties:
+        endpoint: { type: string, format: uri, maxLength: 2048 }
+        expirationTime: { type: [integer, "null"] }
+        keys:
+          $ref: "#/components/schemas/MobilePushKeys"
+        csrfToken: { type: string, minLength: 1 }
+      required: [endpoint, expirationTime, keys, csrfToken]
+    MobilePushUnsubscribeInput:
+      type: object
+      properties:
+        endpoint: { type: string, format: uri, maxLength: 2048 }
+        csrfToken: { type: string, minLength: 1 }
+      required: [endpoint, csrfToken]
+    MobilePasskey:
+      type: object
+      properties:
+        id: { type: string }
+        createdAt: { type: string }
+      required: [id, createdAt]
+    MobilePasskeys:
+      type: object
+      properties:
+        credentials:
+          type: array
+          items: { $ref: "#/components/schemas/MobilePasskey" }
+      required: [credentials]
+    MobilePasskeyLoginStartInput:
+      type: object
+      properties:
+        username: { type: string, minLength: 1, maxLength: 100 }
+        csrf: { type: string, minLength: 1 }
+      required: [username, csrf]
+    MobilePasskeyRegisterStartInput:
+      type: object
+      properties:
+        csrf: { type: string, minLength: 1 }
+      required: [csrf]
+    MobilePasskeyFinishInput:
+      type: object
+      properties:
+        attempt: { type: string, minLength: 1, maxLength: 128 }
+        response:
+          type: object
+          additionalProperties: true
+        csrf: { type: string, minLength: 1 }
+      required: [attempt, response, csrf]
+    MobilePasskeyStartResult:
+      type: object
+      properties:
+        attempt: { type: string }
+        options:
+          type: object
+          additionalProperties: true
+      required: [attempt, options]
+    MobilePasskeyResult:
+      type: object
+      properties:
+        ok: { type: boolean }
+        redirect: { type: [string, "null"] }
+      required: [ok]
+    MobilePasskeyDeleteInput:
+      type: object
+      properties:
+        csrf: { type: string, minLength: 1 }
+      required: [csrf]
 

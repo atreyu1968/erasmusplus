@@ -18,8 +18,13 @@ http.createServer((req, res) => {
     res.end(JSON.stringify({ status: 'ok' }));
     return;
   }
-  // Transport the original SSR/form protocol without rewriting browser URLs,
-  // redirect locations, cookies, CSRF tokens, or streaming request bodies.
+  // Keep the legacy SSR/form protocol and mobile JSON API under the shared
+  // gateway without changing cookies, CSRF tokens, or streaming request bodies.
+  if (req.url === '/api/mobile' || req.url.startsWith('/api/mobile/')) {
+    req.url = req.url.slice('/api'.length) || '/';
+    void handler(req, res);
+    return;
+  }
   if (req.url === '/api/legacy' || req.url.startsWith('/api/legacy/')) {
     req.url = req.url.slice('/api/legacy'.length) || '/';
     void handler(req, res);

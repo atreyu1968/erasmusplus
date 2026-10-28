@@ -62,12 +62,15 @@ export function validCsrf(req, body) {
     crypto.timingSafeEqual(Buffer.from(submitted), Buffer.from(expected));
 }
 export function newSession(id) {
+  return newSessionData(id).cookie;
+}
+export function newSessionData(id) {
   const token = crypto.randomBytes(32).toString('hex');
   const csrf = crypto.randomBytes(24).toString('hex');
   const hash = crypto.createHash('sha256').update(token).digest('hex');
   run('INSERT INTO sessions(token_hash,user_id,csrf,expires_at) VALUES (?,?,?,?)',
     hash,id,csrf,Date.now()+8*3600*1000);
-  return cookie('mmg_session',token);
+  return { token, csrf, cookie:cookie('mmg_session',token) };
 }
 export function deleteSession(auth) {
   if (auth) run('DELETE FROM sessions WHERE token_hash=?',
