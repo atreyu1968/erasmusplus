@@ -14,6 +14,7 @@ import {privacyReady,ageOnRegistration,acknowledgeAdult,clearance,emailGuardianL
 import {activeEdition,editionForUser,destinationsForEdition} from './feature-service.mjs';
 import {getLandingSettings,publicLandingGallery} from './feature-landing.mjs';
 import {renderVisitorLanding} from './feature-landing-view.mjs';
+import QRCode from 'qrcode';
 
 const host=process.env.HOST || '127.0.0.1', port=Number(process.env.PORT || 3000);
 const isRegistrationOpen=() => process.env.MMG_ENABLE_REGISTRATION==='1' && privacyReady();
@@ -139,9 +140,40 @@ function destinationCards(items=destinationsForEdition()){
     '<div><span class="eyebrow">'+X(destination.country)+'</span><h3>'+X(destination.name)+'</h3><p>'+X(destination.description)+'</p>'+media.credit+'</div></article>';
   }).join('')+'</div>':'<div class="card"><p>No hay destinos activos para la edición seleccionada.</p></div>';
 }
-function landing(req){
+function mobileAppUrlForRequest(req){
+  const forwardedHost=String(req.headers['x-forwarded-host']||'').split(',')[0].trim();
+  const host=forwardedHost||String(req.headers.host||'').split(',')[0].trim();
+  const forwardedProto=String(req.headers['x-forwarded-proto']||'').split(',')[0].trim().toLowerCase();
+  let origin='';
+  if(host){
+    const isLocalHost=/^(localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?$/i.test(host);
+    const protocol=forwardedProto==='http'||forwardedProto==='https'?forwardedProto:(isLocalHost?'http':'https');
+    try{
+      const candidate=new URL(protocol+'://'+host);
+      const local=['localhost','127.0.0.1','[::1]'].includes(candidate.hostname);
+      if(!candidate.username&&!candidate.password&&candidate.pathname==='/'&&!candidate.search&&!candidate.hash&&
+        (candidate.protocol==='https:'||(candidate.protocol==='http:'&&local&&process.env.MMG_ENV!=='production'))){
+        origin=candidate.origin;
+      }
+    }catch{}
+  }
+  if(!origin){
+    try{
+      const configured=new URL(publicUrl());
+      if(configured.protocol==='https:'&&!configured.username&&!configured.password&&configured.pathname==='/'&&!configured.search&&!configured.hash)origin=configured.origin;
+    }catch{}
+  }
+  if(!origin)throw Error('No se pudo determinar el origen público para el acceso móvil.');
+  return new URL('/movil/',origin).toString();
+}
+async function landing(req){
   const edition=activeEdition(),destinations=edition?destinationsForEdition(edition.id):[];
   const config=getLandingSettings();
+  const mobileUrl=mobileAppUrlForRequest(req);
+  const mobileQr=await QRCode.toString(mobileUrl,{
+    type:'svg',width:172,margin:1,errorCorrectionLevel:'M',
+    color:{dark:'#143d6b',light:'#ffffff'}
+  });
   const content=renderVisitorLanding({
     settings:{
       title:config.title,eyebrow:config.eyebrow,heroTitle:config.hero_title,
@@ -156,7 +188,9 @@ function landing(req){
     },
     editionLabel:edition?.label||'Sin edición activa',
     destinations,
-    galleryItems:publicLandingGallery()
+    galleryItems:publicLandingGallery(),
+    mobileAppUrl:mobileUrl,
+    mobileAppQr:mobileQr
   });
   layout(req,'Bienvenida',content,{publicPage:true,mainClass:'visitor-landing',hideSidebar:true});
 }
@@ -429,7 +463,7 @@ export async function handler(req,res){
   if(await extraRoute(req,url,req.method,featureApi))return;
 
   if(req.method==='GET'&&url==='/healthz'){header(req,200,'text/plain');res.end('ok');return;}
-  if(req.method==='GET'&&url==='/'){if(req.auth){redirect(req,req.auth.user.role==='coordinator'?'/coordinacion':'/panel');return;}landing(req);return;}
+  if(req.method==='GET'&&url==='/'){if(req.auth){redirect(req,req.auth.user.role==='coordinator'?'/coordinacion':'/panel');return;}await landing(req);return;}
   if(req.method==='GET'&&url==='/acceso'){login(req);return;}
   if(req.method==='GET'&&url==='/registro'){registration(req);return;}
   if(req.method==='GET'&&url==='/reenviar'){resendForm(req);return;}

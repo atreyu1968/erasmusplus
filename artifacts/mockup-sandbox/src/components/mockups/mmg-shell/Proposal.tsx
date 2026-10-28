@@ -76,7 +76,7 @@ export function Proposal() {
           --mmg-navy:#143d6b; --mmg-blue:#236cba; --mmg-teal:#12a5a5;
           --mmg-ink:#203951; --mmg-muted:#71849a; --mmg-line:#e0e9f1;
           --mmg-canvas:#f2f6fa; --mmg-white:#fff;
-          min-height:100vh; background:var(--mmg-canvas); color:var(--mmg-ink);
+          height:100vh; min-height:0; overflow:hidden; background:var(--mmg-canvas); color:var(--mmg-ink);
           font:13px/1.45 "DM Sans", "Segoe UI", sans-serif; display:flex; flex-direction:column;
         }
         .mmg-proposal * { box-sizing:border-box; }
@@ -90,7 +90,7 @@ export function Proposal() {
         .mmg-userline { display:flex; align-items:center; gap:11px; font-size:11px; color:#e8f0f7; }
         .mmg-usercircle { width:30px; height:30px; display:grid; place-items:center; border-radius:50%; background:#d6edf0; color:var(--mmg-navy); font-weight:800; }
         .mmg-signout { border:1px solid #ffffff50; background:transparent; color:white; border-radius:6px; padding:7px 10px; font-size:10px!important; margin-left:8px; }
-        .mmg-body { flex:1; min-height:calc(100vh - 62px); display:grid; grid-template-columns:68px minmax(0,1fr); }
+        .mmg-body { flex:1; min-height:0; overflow:hidden; display:grid; grid-template-columns:68px minmax(0,1fr); }
         .mmg-rail { background:#fff; border-right:1px solid var(--mmg-line); display:flex; flex-direction:column; align-items:center; padding:14px 8px; gap:6px; }
         .mmg-railmark { font-size:9px; color:#9aabba; font-weight:800; letter-spacing:.8px; margin:0 0 5px; }
         .mmg-railbutton { width:42px; height:39px; border:0; color:#768ba0; display:grid; place-items:center; background:transparent; border-radius:8px; position:relative; text-decoration:none; }
@@ -98,7 +98,10 @@ export function Proposal() {
         .mmg-railbutton.active { background:#eaf3fc; color:var(--mmg-blue); }
         .mmg-railbutton.active:before { content:""; position:absolute; left:-8px; height:22px; width:3px; border-radius:0 3px 3px 0; background:var(--mmg-teal); }
         .mmg-raildivider { width:30px; height:1px; background:var(--mmg-line); margin:8px 0; }
-        .mmg-work { min-width:0; padding:26px 34px 18px; max-width:1540px; width:100%; margin:0 auto; }
+        .mmg-work { min-width:0; min-height:0; height:100%; overflow-y:auto; overscroll-behavior-y:contain; scrollbar-gutter:stable; scrollbar-width:thin; scrollbar-color:#143d6b2e transparent; padding:26px 34px 18px; max-width:1540px; width:100%; margin:0 auto; }
+        .mmg-work::-webkit-scrollbar { width:5px; }
+        .mmg-work::-webkit-scrollbar-track { background:transparent; }
+        .mmg-work::-webkit-scrollbar-thumb { border-radius:8px; background:#143d6b2e; }
         .mmg-crumb { color:#8a9bae; font-size:10px; display:flex; align-items:center; gap:6px; margin:0 0 10px; }
         .mmg-crumb strong { color:var(--mmg-blue); font-weight:700; }
         .mmg-pagehead { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:21px; }
@@ -157,6 +160,7 @@ export function Proposal() {
           .mmg-actions { justify-content:flex-start; }
         }
         @media(max-width:680px) {
+          .mmg-proposal { height:auto; min-height:100vh; overflow:visible; }
           .mmg-topbar { height:58px; padding:0 13px; }
           .mmg-brandmark { width:32px; height:32px; }
           .mmg-brandname { font-size:11px; }
@@ -165,14 +169,14 @@ export function Proposal() {
           .mmg-userline { gap:7px; font-size:10px; }
           .mmg-userline .mmg-userlabel { display:none; }
           .mmg-signout { padding:6px 7px; margin-left:1px; }
-          .mmg-body { display:block; min-height:calc(100vh - 58px); }
+          .mmg-body { display:block; min-height:calc(100vh - 58px); overflow:visible; }
           .mmg-mobiletoggle { display:flex; width:100%; justify-content:space-between; align-items:center; border:0; border-bottom:1px solid var(--mmg-line); padding:9px 14px; color:var(--mmg-navy); background:#fff; font-size:11px; font-weight:750; }
           .mmg-rail { display:none; align-items:stretch; padding:8px 12px; flex-direction:row; flex-wrap:wrap; gap:5px; }
           .mmg-rail.open { display:flex; }
           .mmg-railmark,.mmg-raildivider { display:none; }
           .mmg-railbutton { width:39px; height:37px; }
           .mmg-railbutton.active:before { left:8px; top:-8px; height:3px; width:22px; border-radius:0 0 3px 3px; }
-          .mmg-work { padding:19px 13px 14px; }
+          .mmg-work { height:auto; min-height:0; overflow:visible; scrollbar-gutter:auto; padding:19px 13px 14px; }
           .mmg-pagehead { align-items:flex-start; flex-direction:column; gap:7px; margin-bottom:15px; }
           .mmg-pagehead h1 { font-size:23px; }
           .mmg-head-meta { display:none; }
@@ -185,6 +189,7 @@ export function Proposal() {
           .mmg-action { padding:6px 8px; font-size:9px!important; }
           .mmg-footer { font-size:8px; }
         }
+        @media(max-width:680px) and (pointer:coarse) { .mmg-proposal { overscroll-behavior-y:contain; } }
         @media(prefers-reduced-motion:reduce) { .mmg-proposal *, .mmg-proposal *:before, .mmg-proposal *:after { scroll-behavior:auto!important; } }
       `}</style>
       <header className="mmg-topbar">

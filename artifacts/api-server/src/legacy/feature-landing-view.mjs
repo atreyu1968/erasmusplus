@@ -101,7 +101,7 @@ function renderSocial(name, value, label) {
  * Render the public Erasmus+ landing page body.
  * The server layout remains responsible for the fixed branded header and public shell.
  */
-export function renderVisitorLanding({ settings = {}, editionLabel = '', destinations = [], galleryItems = [] } = {}) {
+export function renderVisitorLanding({ settings = {}, editionLabel = '', destinations = [], galleryItems = [], mobileAppUrl = '', mobileAppQr = '' } = {}) {
   const title = settings.title || 'IES Manuel Martín González';
   const eyebrow = settings.eyebrow || 'IES Manuel Martín González · Tenerife';
   const heroTitle = settings.heroTitle || 'Enriqueciendo vidas. Abriendo mentes.';
@@ -129,6 +129,17 @@ export function renderVisitorLanding({ settings = {}, editionLabel = '', destina
     renderSocial('Facebook', settings.socialFacebook, 'Facebook'),
     renderSocial('YouTube', settings.socialYoutube, 'YouTube')
   ].filter(Boolean).join('');
+  const mobileInstallContent = mobileAppUrl && mobileAppQr
+    ? '<section class="vl-mobile-install" aria-labelledby="vl-mobile-install-title">' +
+      '<div class="vl-mobile-install-copy"><p class="vl-kicker">ERASMUS+ · ACCESO MÓVIL</p>' +
+      '<h2 id="vl-mobile-install-title">Continúa desde tu teléfono.</h2>' +
+      '<p>Escanea el código para abrir la aplicación y añadirla a la pantalla de inicio.</p>' +
+      '<div class="vl-install-platforms"><div><strong>Android</strong><span>Abre el enlace en Chrome y elige «Instalar aplicación» o «Añadir a pantalla de inicio».</span></div>' +
+      '<div><strong>iPhone y iPad</strong><span>Abre el enlace en Safari, pulsa «Compartir» y elige «Añadir a pantalla de inicio».</span></div></div>' +
+      '<a class="vl-install-link" href="' + escapeHtml(mobileAppUrl) + '">Abrir la aplicación móvil ' + arrow() + '</a></div>' +
+      '<div class="vl-mobile-qr" role="img" aria-label="Código QR para acceder e instalar la aplicación Erasmus+ MMG">' + mobileAppQr +
+      '<span>Acceso directo a la aplicación</span></div></section>'
+    : '';
 
   const heroArt =
     '<div class="vl-hero-art"><img src="' + escapeHtml(heroImage) + '" alt="" aria-hidden="true"><span class="vl-art-label">IES MMG · Guía de Isora · Tenerife</span></div>';
@@ -161,6 +172,7 @@ export function renderVisitorLanding({ settings = {}, editionLabel = '', destina
       '<div><small>Destinos publicados</small><strong class="vl-ribbon-number">' + String(validDestinations.length).padStart(2, '0') + '</strong></div>' +
       '<div><small>Europa te espera</small><strong>' + escapeHtml(countryLine) + '</strong></div>' +
     '</div>' +
+    mobileInstallContent +
     '<section class="vl-story" aria-labelledby="vl-story-title">' +
       '<div class="vl-story-mark"><strong>+EU</strong><span>Aprendizaje que cruza fronteras</span></div>' +
       '<div class="vl-story-copy"><p class="vl-kicker">Una oportunidad real de aprender haciendo</p><h2 id="vl-story-title">' + escapeHtml(aboutTitle) + '</h2>' +

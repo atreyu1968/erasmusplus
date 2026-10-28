@@ -516,3 +516,17 @@ details.card>.inline-form{padding:0 18px 18px}
  .landing-gallery-admin-item>img{width:82px;height:64px}
  .landing-gallery-admin-item>.form{grid-column:1/-1}
 }
+.visitor-landing .vl-mobile-install{display:grid;grid-template-columns:minmax(0,1fr) 196px;align-items:center;gap:28px;margin:18px auto 42px;padding:24px clamp(22px,4vw,40px);border:1px solid #d7e4eb;border-radius:20px;background:linear-gradient(120deg,#f7fbfc,#eaf4f5)}
+.visitor-landing .vl-mobile-install h2{max-width:640px;margin:0;color:#143d6b;font-size:clamp(24px,3vw,33px);line-height:1.1;letter-spacing:-.03em}
+.visitor-landing .vl-mobile-install-copy>p:not(.vl-kicker){max-width:620px;margin:10px 0 0;color:#546b80;font-size:12px;line-height:1.65}
+.visitor-landing .vl-install-platforms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:18px 0 13px}
+.visitor-landing .vl-install-platforms>div{display:grid;align-content:start;gap:5px;padding:13px;border:1px solid #dce8ee;border-radius:12px;background:#fff}
+.visitor-landing .vl-install-platforms strong{color:#176a76;font-size:11px}
+.visitor-landing .vl-install-platforms span{color:#61778b;font-size:10px;line-height:1.55}
+.visitor-landing .vl-install-link{display:inline-flex;align-items:center;gap:8px;color:#236cba;font-size:11px;font-weight:800;text-decoration:none}
+.visitor-landing .vl-install-link:hover{text-decoration:underline}
+.visitor-landing .vl-mobile-qr{display:grid;justify-items:center;gap:8px;padding:12px;border:1px solid #dce8ee;border-radius:15px;background:#fff;box-shadow:0 9px 24px #143d6b12}
+.visitor-landing .vl-mobile-qr svg{display:block;width:172px;height:172px;max-width:100%}
+.visitor-landing .vl-mobile-qr span{color:#718398;font-size:9px;text-align:center}
+@media(max-width:760px){.visitor-landing .vl-mobile-install{display:none}}
+@media(min-width:761px) and (max-width:960px){.visitor-landing .vl-mobile-install{grid-template-columns:minmax(0,1fr) 176px;gap:18px}.visitor-landing .vl-install-platforms{gap:8px}}
